@@ -1,5 +1,8 @@
 # LöveDebugger
+
 (Not so) simple debugging tool for [Löve](https://www.love2d.org/), currently for Löve version 0.10.2 (may work with other versions).
+
+Download the 'debugger.lua' file and include it in your Lua path or game directory (I suggest against leaving debug code in releases).
 
 ---
 
@@ -40,11 +43,11 @@ end
 
 *Do not change your callbacks after this point, or something may break.* This should not be a concern in most cases however.
 
-To open the Lua console and environment, hit 'F4'.
+To open the Lua prompt and environment, hit 'F4'.
 
-At the bottom is said Lua console, at the right is said global environment. Use the keyboard to type stuff into the console, hit 'Return' to confirm and execute the code.
+At the bottom is said Lua prompt, at the right is said global environment. Use the keyboard to type code into the prompt, hit 'Return' to confirm and execute it.
 
-The environment is navigated solely with your mouse and Shift key.
+The environment is navigated solely with your mouse and Shift key:
 
 ```
 L = Left Mouse Button
@@ -56,13 +59,15 @@ Clicking the top:
 	R = Navigate to metatable or current 'path'
 
 Clicking a variable name:
-	L = Navigate to (table), copy name to console
+	L = Navigate to (table), copy name to the prompt
+	R = Always copy name to the prompt
 	SL = Navigate to a function's upvalues (requires calling debugger.allowFunctionIndex() beforehand, see below)
-	R = Always copy name to console
 	SR = Navigate to metatable, if defined
 ```
 
 You can also use the arrow keys (up and down) to bring back previous inputs to the Lua prompt.
+
+'F5' will toggle whether print calls will be drawn to the screen while the Lua prompt is disabled or clear the current input in the Lua prompt.
 
 ---
 
