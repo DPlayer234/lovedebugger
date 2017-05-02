@@ -1,11 +1,18 @@
+--[[
+Copyright © 2017 "DPlayer234"/"DPlay"
+This work is free. You can redistribute it and/or modify it under the
+terms of the Do What The Fuck You Want To Public License, Version 2,
+as published by Sam Hocevar. See the COPYING file for more details.
+]]
+
 local debugger = {}
 
 debugger.activate    = "f4" -- Löve KeyConstant of the key used to open the console. (Default: 'f4')
-debugger.clearPrompt = "f5" -- Löve KeyConstant of the key used to clear the command prompt and toggle 'debugger.doTempPrint'. (Default: 'f5')
-debugger.textfade    = 7     -- Time it takes for text to fade away after its 'print' call in seconds.
-debugger.printArea   = 2/3   -- Screen Area where the prints are displayed (ratio 0.0-1.0). (Default: 2/3)
-debugger.doTempPrint = true  -- Whether or not to print to the screen if the console is closed.
-debugger.maxStorage  = 100   -- How many console inputs are stored to be reused (by using 'Up' and 'Down' arrow keys). (Default: 100)
+debugger.clearPrompt = "f5" -- Löve KeyConstant of the key used to clear the Lua prompt and toggle 'debugger.doTempPrint'. (Default: 'f5')
+debugger.textfade    = 7    -- Time it takes for text to fade away after its 'print' call in seconds.
+debugger.printArea   = 2/3  -- Screen Area where the prints are displayed (ratio 0.0-1.0). (Default: 2/3)
+debugger.doTempPrint = true -- Whether or not to print to the screen if the console is closed.
+debugger.maxStorage  = 100  -- How many console inputs are stored to be reused (by using 'Up' and 'Down' arrow keys). (Default: 100)
 
 debugger.color = {           -- Various colors used
 	-- Active:

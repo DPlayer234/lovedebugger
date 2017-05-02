@@ -61,11 +61,11 @@ Clicking the top:
 Clicking a variable name:
 	L = Navigate to (table), copy name to the prompt
 	R = Always copy name to the prompt
-	SL = Navigate to a function's upvalues (requires calling debugger.allowFunctionIndex() beforehand, see below)
+	SL = Navigate to a function's upvalues (requires calling debugger.allowFunctionIndex() beforehand, see below!)
 	SR = Navigate to metatable, if defined
 ```
 
-You can also use the arrow keys (up and down) to bring back previous inputs to the Lua prompt.
+You can also use the arrow keys (up and down) to bring back previous inputs to the Lua prompt. Ctrl+V (pasting) and Ctrl+C (copying the entire prompt) is also supported.
 
 'F5' will toggle whether print calls will be drawn to the screen while the Lua prompt is disabled or clear the current input in the Lua prompt.
 
@@ -85,40 +85,70 @@ Furthermore, if you went the manual route, `debugger.setOverrides` allows for an
 There's also a few additional functions you may access if required.
 
 ```lua
-debugger.setFont(font) -- Sets a new font to be used by the console and such
-debugger.getFont() -- Returns the currently used font
+debugger.setFont(font)
+-- Sets a new font to be used by the console and such
+debugger.getFont()
+-- Returns the currently used font
 
-debugger.print(colorTable, ...) -- Print exclusively to the debugger's console in the defined color
-debugger.realPrint(...) -- Actual Lua print function
-debugger.clear() -- Clears the console
+debugger.print(colorTable, ...)
+-- Print exclusively to the debugger's console in the defined color
+debugger.realPrint(...)
+-- Regular Lua print function
+debugger.clear()
+-- Clears the console
 
-debugger.setActive(active) -- Sets whether or not the Lua prompt is active
-debugger.isActive() -- Returns whether the Lua prompt is active
+debugger.setActive(active)
+-- Sets whether or not the Lua prompt is active
+debugger.isActive()
+-- Returns whether the Lua prompt is active
 
 debugger.allowFunctionIndex(desc)
--- Enables function indexing, allowing you to browse the upvalues of functions by Shift-Left-Clicking them in the environment.
--- The optional argument is whether or not to also give functions better 'tostring' values (more easily readable/descriptive).
+-- Enables function indexing, allowing you to browse the upvalues
+-- of functions by Shift-Left-Clicking them in the environment.
+-- The optional argument is whether or not to also give functions
+-- better 'tostring' values (more easily readable/descriptive),
+-- like 'function: lib.func (lib.lua:4)'.
 
 debugger.monitorGlobal(writeTo)
--- Enables monitoring the global environment for unusual changes or activities (by which I mean, new definitions, accessing unused variables etc.).
--- 'writeto' is the file path (within the Löve save directory) to write the output to. Defaults to '_G (log).txt'.
+-- Enables monitoring the global environment for unusual changes or activities
+-- (by which I mean, new definitions, accessing unused variables etc.).
+-- 'writeto' is the file path (within the Löve save directory) to write the output to.
+-- Defaults to '_G (log).txt'.
+```
+
+There's also a few constants that you may modify as well as their defaults:
+
+```lua
+debugger.activate    = "f4"
+-- Löve KeyConstant of the key used to open the console.
+
+debugger.clearPrompt = "f5"
+-- Löve KeyConstant of the key used to clear the Lua prompt
+-- and toggle 'debugger.doTempPrint'.
+
+debugger.textfade    = 7
+-- Time it takes for text to fade away after its 'print'
+-- call in seconds while the Lua prompt is closed.
+
+debugger.printArea   = 2/3
+-- Screen Area where the prints are displayed (ratio 0.0-1.0).
+
+debugger.maxStorage  = 100
+-- How many console inputs are stored to be reused
+-- (by using 'Up' and 'Down' arrow keys).
+
+debugger.doTempPrint = true
+-- Whether or not to print to the screen if the console is closed.
+
+debugger.color = {...}
+-- A list of several colors used by the debugger, most notably:
+-- fgActive, fgActive2, bgActive,
+-- fgNotActive, bgNotActive
 ```
 
 ---
 
-Licensed under the WTFPL License:
-```
-DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-          Version 2, December 2004
-
-Copyright (C) 2004 Sam Hocevar <sam@hocevar.net>
-
-Everyone is permitted to copy and distribute verbatim or modified
-copies of this license document, and changing it is allowed as long
-as the name is changed.
-
-         DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
-
-0. You just DO WHAT THE FUCK YOU WANT TO.
-```
+Copyright © 2017 "DPlayer234"/"DPlay"<br>
+This work is free. You can redistribute it and/or modify it under the<br>
+terms of the Do What The Fuck You Want To Public License, Version 2,<br>
+as published by Sam Hocevar. See the COPYING file for more details.
