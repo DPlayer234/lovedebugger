@@ -56,10 +56,10 @@ S = Shift (Left or Right)
 
 Clicking the top:
 	L = Go back
-	R = Navigate to metatable or current 'path'
+	R = Navigate to the metatable of the current 'path'
 
 Clicking a variable name:
-	L = Navigate to (table), copy name to the prompt
+	L = Navigate to table, copy name to the prompt otherwise
 	R = Always copy name to the prompt
 	SL = Navigate to a function's upvalues (requires calling debugger.allowFunctionIndex() beforehand, see below!)
 	SR = Navigate to metatable, if defined
