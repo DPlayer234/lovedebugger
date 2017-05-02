@@ -1023,7 +1023,10 @@ if debug then
 						if defined then
 							v = defined:match("[^_a-zA-Z0-9]function%s+([_a-zA-Z][%.%:_a-zA-Z0-9]*)[^_a-zA-Z0-9]")
 							if not v then
-								v = defined:match("[^_a-zA-Z0-9]([_a-zA-Z][%.%:_a-zA-Z0-9]*)%s*=%s*function[^_a-zA-Z0-9]")
+								v = defined:match("[^_a-zA-Z0-9]([_a-zA-Z][%.%:_a-zA-Z0-9]*)%s*=%s*%(*function[^_a-zA-Z0-9]")
+								if not v then
+									v = "(unnamed)"
+								end
 							end
 							v = v.." ("..source..":"..tostring(linedefined)..")"
 						end
@@ -1043,7 +1046,6 @@ if debug then
 					end
 
 					t[f] = v
-
 					return v
 				end,
 				__mode = "kv"
