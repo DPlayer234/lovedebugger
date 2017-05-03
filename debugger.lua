@@ -51,6 +51,7 @@ local tostring = function(t)
 	local s,r = pcall(_tostring,t)
 	return s and r or ":ERROR:"
 end
+local error = error
 local debug = require("debug")
 
 -- Dependencies, yes, I require those. *BADUM-TSS*
@@ -369,7 +370,9 @@ function debugger.setActive(status)
 			hastextinput = love.keyboard.hasTextInput()
 			love.keyboard.setTextInput(true)
 
-			love.event.push("keyreleased",debugger.activate,love.keyboard.getScancodeFromKey(debugger.activate))
+			if inputs[debugger.activate] and callbacks.keyreleased then
+				callbacks.keyreleased(debugger.activate,love.keyboard.getScancodeFromKey(debugger.activate))
+			end
 
 			for k,v in pairs(override) do
 				callbacks[k] = v
@@ -411,7 +414,7 @@ local fromPattern = "%[\"[_a-zA-Z][_a-zA-Z0-9]-\"%]"
 local nicerPush = function(t) return "."..string.sub(t,3,#t-2) end
 function debugger.update()
 	if inputs[debugger.activate] then
-		debugger.setActive(not active)
+		debugger.setActive()
 	end
 
 	if #lgtime > 0 then
@@ -552,7 +555,6 @@ function debugger.update()
 		if not s then dv = nil end
 
 		if (inputs.m1 or inputs.m2) then
-
 			if love.mouse.getX() >= math.ceil(love.graphics.getWidth()*debugger.printArea) then
 				local nid = math.floor(love.mouse.getY()/fheight-2)
 				local shift = realKeyboard.isDown("lshift","rshift")
@@ -595,6 +597,9 @@ function debugger.update()
 								-- LMB
 								-- Navigating to a function's upvalues
 								display = ndisplay
+								index = sortedTable(dv.___allupvalues,index)
+
+								yScroll = 1
 							end
 						else
 							-- Copying the variable name to the prompt
@@ -834,9 +839,11 @@ function debugger.draw()
 		lgraphics.rectangle("fill",0,math.ceil(h-fheight),w,fheight)
 
 		lgraphics.setColor(color.fgActive)
-		lgraphics.setScissor(0,0,tt-1,hlg)
-		lgraphics.printf(lg,0,0,tt,"left")
-		lgraphics.setScissor()
+		if debugger.printArea > 0 then
+			lgraphics.setScissor(0,0,tt-1,hlg)
+			lgraphics.printf(lg,0,0,tt,"left")
+			lgraphics.setScissor()
+		end
 
 		pcall(promtPrint,w,h,fheight)
 
@@ -870,7 +877,9 @@ function debugger.draw()
 		lgraphics.rectangle("fill",w-tw,0,tw,3*fheight)
 
 		lgraphics.setColor(color.fgNotActive)
-		lgraphics.printf(lgtemp,0,0,tt,"left")
+		if debugger.printArea > 0 then
+			lgraphics.printf(lgtemp,0,0,tt,"left")
+		end
 		lgraphics.printf(string.format("%d fps\n~%.1f KB\n%.6f sec.",dep.getFPS(),ram,updateDif),w-tw,0,tw,"right")
 	else
 		-- Not printing the print calls
@@ -1033,10 +1042,6 @@ if debug then
 					end
 
 					if v then
-						local s,e = pcall(checkUtf8,v)
-						if not s then
-							v = ":ERROR: (utf8)"
-						end
 						v = "function: "..v
 					else
 						local __tostring = funcMeta.__tostring
