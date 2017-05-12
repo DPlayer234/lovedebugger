@@ -94,6 +94,8 @@ function debugger.getFont()
 	return font
 end
 
+debugger.setFont(love.graphics.getFont())
+
 -- Print Calls / Wrapping the 'regular' print
 local realPrint = print
 
@@ -225,6 +227,7 @@ local textinput = ""
 local texttable = {}
 local lastselect = 0
 local lastinput = {}
+local commands = {}
 
 -- Storing original callbacks/overriding them to be used
 local override, original = {}, {}
@@ -479,7 +482,71 @@ function debugger.update()
 
 			texttable = {}
 			textPosition = 1
-			if textinput:match("[_a-zA-Z0-9%.%[%]\"']+%s*=[^=].*") == textinput then
+			if textinput:find("^[/\\=!:,%.%%%*]") then
+				-- A command. Has to be.
+				local args = {}
+				for match in textinput:gmatch("%S+") do
+					args[#args+1] = match
+				end
+				local one = table.remove(args,1)
+				local command = commands[one:sub(2, #one)]
+				if command then
+					local pattern = "^"
+					for i=1,#args do
+						local v = args[i]
+						if tonumber(v) then
+							pattern = pattern.."[ns]"
+						elseif v == "true" or v == "false" then
+							pattern = pattern.."[bs]"
+						else
+							pattern = pattern.."s"
+						end
+					end
+					pattern = pattern.."$"
+
+					local this
+					for k,v in pairs(command) do
+						if v.args:find(pattern) then
+							this = v
+							break
+						end
+					end
+
+					if this then
+						local i = 0
+						for c in this.args:gmatch(".") do
+							i = i + 1
+							if c == "n" then
+								args[i] = tonumber(args[i])
+							elseif c == "b" then
+								if args[i] == "true" then
+									args[i] = true
+								elseif args[i] == "false" then
+									args[i] = false
+								end
+							end
+						end
+
+						local s,out = pcall(this.func,unpack(args))
+						if s then
+							out = out or ":Executed."
+							realPrint(out)
+							proxyPrint(color.yellow,out)
+						else
+							realPrint(":ERROR:"..tostring(out))
+							proxyPrint(color.red,out)
+						end
+					else
+						local out = ":ERROR:Incorrect arguments..."
+						realPrint(out)
+						proxyPrint(color.red,out)
+					end
+				else
+					local out = ":ERROR:Unknown command. Add commands with debugger.newCommand(name, args, function)"
+					realPrint(out)
+					proxyPrint(color.red,out)
+				end
+			elseif textinput:match("[_a-zA-Z0-9%.%[%]\"']+%s*=[^=].*") == textinput then
 				-- Probably Variable assignment
 				local success,err = pcall(loadstring(textinput,"prompt"))
 				if success then
@@ -908,6 +975,25 @@ function debugger.isActive()
 	return active
 end
 
+function debugger.newCommand(name,args,func,dontLog)
+	assert(type(name) == "string", "Command Name has to be a string!")
+	assert(type(args) == "string", "Argument Pattern has to be a string!")
+	assert(type(func) == "function" or getmetatable(func) and rawget(getmetatable(func),"__call"), "Argument function needs to be callable!")
+
+	if commands[name] == nil then commands[name] = {} end
+	local c = {
+		args = args,
+		func = func
+	}
+	commands[name][#commands[name]+1] = c
+
+	if not dontLog then
+		local msg = ":Added command of type "..name.." "..args
+		realPrint(msg)
+		proxyPrint(color.blue,msg)
+	end
+end
+
 if debug then
 	-- Up-Value-getter
 	function debugger.allowFunctionIndex(desc)
@@ -919,7 +1005,7 @@ if debug then
 		local getupvalue = debug.getupvalue
 		local setupvalue = debug.setupvalue
 		local traceback  = debug.traceback
-		local jitfuncinfo, isFile
+		local jitfuncinfo, isFile, lines
 		pcall(function()
 			jitfuncinfo = require("jit").util.funcinfo
 
@@ -1088,7 +1174,6 @@ function debugger.monitorGlobal(writeTo)
 	setmetatable(_G,{
 		__newindex = function(t,k,v)
 			local msg = "New global defined: "..tostring(k).."="..tostring(v).." (type "..type(v)..")"
-
 			realPrint(msg)
 			proxyPrint(color.blue,msg)
 
@@ -1099,7 +1184,6 @@ function debugger.monitorGlobal(writeTo)
 		end,
 		__index = function(t,k)
 			local msg = "Trying to access undefined global: "..tostring(k)
-
 			realPrint(msg)
 			proxyPrint(color.blue,msg)
 
@@ -1111,11 +1195,30 @@ function debugger.monitorGlobal(writeTo)
 	})
 end
 
-debugger.setFont(lgraphics.getFont())
+-- Adding some default commands!
+debugger.newCommand("index" ,"" ,debugger.allowFunctionIndex,true)
+debugger.newCommand("index" ,"b",debugger.allowFunctionIndex,true)
+debugger.newCommand("global","" ,debugger.monitorGlobal,true)
+debugger.newCommand("global","s",debugger.monitorGlobal,true)
+-- Screen Clearing
+debugger.newCommand("clear" ,"", debugger.clear,true)
+-- Quick navigation
+debugger.newCommand("to"    ,"", function()
+	display = "_G"
+	yScroll = 1
+	return ":Moved to "..display.."."
+end,true)
+debugger.newCommand("to"    ,"s",function(s)
+	display = s:gsub("%.([^%[%]\"'%(%)%{%}%.]*)",
+	function(t) return "[\""..t.."\"]" end)
+	yScroll = 1
+	return ":Moved to "..display.."."
+end,true)
+debugger.newCommand("loc","",function() return ":Currently at "..display end,true)
 
-debugger.A_DontScrewWith = true
-debugger.B_TheVariables = true
-debugger.C_OrItMayCrash = true
+debugger.A_DontScrewWith = true -- !!!
+debugger.B_TheVariables  = true -- !!!
+debugger.C_OrItMayBreak  = true -- !!!
 
 setmetatable(debugger,{
 	__call = function(self,other,cb)
