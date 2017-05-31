@@ -13,6 +13,7 @@ debugger.textfade    = 7    -- Time it takes for text to fade away after its 'pr
 debugger.printArea   = 2/3  -- Screen Area where the prints are displayed (ratio 0.0-1.0). (Default: 2/3)
 debugger.doTempPrint = true -- Whether or not to print to the screen if the console is closed.
 debugger.maxStorage  = 100  -- How many console inputs are stored to be reused (by using 'Up' and 'Down' arrow keys). (Default: 100)
+debugger.useTitleBar = true -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar. (Default: true)
 
 debugger.color = {           -- Various colors used
 	-- Active:
@@ -35,18 +36,15 @@ debugger.color = {           -- Various colors used
 -- debugger.print(...) will print text to the debugger's console exclusively.
 -- Controller/Joystick inputs won't be disabled, so feel free to use a controller while testing/debugging.
 local collectgarbage = collectgarbage
-local getmetatable = getmetatable
-local rawset = rawset
-local table = table
-local string = string
-local math = math
+local setmetatable,getmetatable = setmetatable,getmetatable
+local rawset,rawget = rawset,rawget
+local table,string,math = table,string,math
 local require = require
-local _tostring = tostring
 local type = type
 local pcall = pcall
 local loadstring = loadstring or load
-local pairs = pairs
-local ipairs = ipairs
+local pairs,ipairs = pairs,ipairs
+local _tostring,tonumber = tostring,tonumber
 local tostring = function(t)
 	local s,r = pcall(_tostring,t)
 	return s and r or ":ERROR:"
@@ -67,8 +65,33 @@ if love.timer then
 	dep.getTime = love.timer.getTime
 else
 	local time = 0
-	dep.getFPS = function() return 0/0 end
-	dep.getTime = function() time = time + 1/60 return time end
+	dep.getFPS = --[[]]function() return 0/0 end
+	dep.getTime = --[[]]function() time = time + 1/60 return time end
+end
+if love.window then
+	dep.getTitle = love.window.getTitle
+	dep.setTitle = love.window.setTitle
+	dep.titleUpdated = false
+
+	local title = dep.getTitle()
+	local updated = false
+	dep.getRegularTitle = --[[]]function() return title end
+	love.window.getTitle = dep.getRegularTitle
+	love.window.setTitle = --[[]]function(new)
+		local oftype = type(new)
+		if type(new) == "string" then
+			title = new
+		elseif type(new) == "number" then
+			title = tostring(new)
+		else
+			error("Bad argument #1 to '?' (string expected, got "..type(new)..")", 2)
+		end
+		dep.titleUpdated = true
+	end
+else
+	dep.getTitle = --[[]]function()return""end
+	dep.setTitle = --[[]]function()end
+	dep.titleUpdated = false
 end
 
 local function cloneList(t)
@@ -897,7 +920,12 @@ function debugger.draw()
 		local stringName = table.concat(printName," \n")
 		local stringData = table.concat(printData,"\n")
 
-		local header = "\t"..path.."\n\tType: "..vartype.." ~"..math.floor(ram+0.5).." KB "..dep.getFPS().." fps"
+		local header
+		if debugger.useTitleBar then
+			header = "\t"..path.."\n\tType: "..vartype
+		else
+			header = "\t"..path.."\n\tType: "..vartype.." ~"..math.floor(ram+0.5).." KB "..dep.getFPS().." fps"
+		end
 		local hprinted = count(stringType,"\n")*fheight
 
 		-- Printed text and Prompt
@@ -947,8 +975,10 @@ function debugger.draw()
 		if debugger.printArea > 0 then
 			lgraphics.printf(lgtemp,0,0,tt,"left")
 		end
-		lgraphics.printf(string.format("%d fps\n~%.1f KB\n%.6f sec.",dep.getFPS(),ram,updateDif),w-tw,0,tw,"right")
-	else
+		if not debugger.useTitleBar then
+			lgraphics.printf(string.format("%d fps\n~%.1f KB\n%.6f sec.",dep.getFPS(),ram,updateDif),w-tw,0,tw,"right")
+		end
+	elseif not debugger.useTitleBar then
 		-- Not printing the print calls
 		local updateDif = dep.getTime() - updateTime
 		local tw = font:getWidth("~0000000 KB\n0.000000 sec.")
@@ -958,6 +988,13 @@ function debugger.draw()
 
 		lgraphics.setColor(color.fgNotActive)
 		lgraphics.printf(string.format("%d fps\n~%.1f KB\n%.6f sec.",dep.getFPS(),ram,updateDif),w-tw,0,tw,"right")
+	end
+
+	if debugger.useTitleBar then
+		dep.setTitle(("%s [%d FPS] [%.1f KB] [%.6f s.]"):format(dep.getRegularTitle(),dep.getFPS(),ram,dep.getTime()-updateTime))
+	elseif dep.titleUpdated then
+		dep.setTitle(dep.getRegularTitle())
+		dep.titleUpdated = false
 	end
 
 	-- Returning the graphics state
@@ -975,7 +1012,7 @@ function debugger.isActive()
 	return active
 end
 
-function debugger.newCommand(name,args,func,dontLog)
+function debugger.newCommand(name,args,func)
 	assert(type(name) == "string", "Command Name has to be a string!")
 	assert(type(args) == "string", "Argument Pattern has to be a string!")
 	assert(type(func) == "function" or getmetatable(func) and rawget(getmetatable(func),"__call"), "Argument function needs to be callable!")
@@ -986,12 +1023,6 @@ function debugger.newCommand(name,args,func,dontLog)
 		func = func
 	}
 	commands[name][#commands[name]+1] = c
-
-	if not dontLog then
-		local msg = ":Added command of type "..name.." "..args
-		realPrint(msg)
-		proxyPrint(color.blue,msg)
-	end
 end
 
 if debug then
@@ -1196,25 +1227,25 @@ function debugger.monitorGlobal(writeTo)
 end
 
 -- Adding some default commands!
-debugger.newCommand("index" ,"" ,debugger.allowFunctionIndex,true)
-debugger.newCommand("index" ,"b",debugger.allowFunctionIndex,true)
-debugger.newCommand("global","" ,debugger.monitorGlobal,true)
-debugger.newCommand("global","s",debugger.monitorGlobal,true)
+debugger.newCommand("index" ,"" ,debugger.allowFunctionIndex)
+debugger.newCommand("index" ,"b",debugger.allowFunctionIndex)
+debugger.newCommand("global","" ,debugger.monitorGlobal)
+debugger.newCommand("global","s",debugger.monitorGlobal)
 -- Screen Clearing
-debugger.newCommand("clear" ,"", debugger.clear,true)
+debugger.newCommand("clear" ,"", debugger.clear)
 -- Quick navigation
 debugger.newCommand("to"    ,"", function()
 	display = "_G"
 	yScroll = 1
 	return ":Moved to "..display.."."
-end,true)
+end)
 debugger.newCommand("to"    ,"s",function(s)
 	display = s:gsub("%.([^%[%]\"'%(%)%{%}%.]*)",
 	function(t) return "[\""..t.."\"]" end)
 	yScroll = 1
 	return ":Moved to "..display.."."
-end,true)
-debugger.newCommand("loc","",function() return ":Currently at "..display end,true)
+end)
+debugger.newCommand("loc","",function() return ":Currently at "..display end)
 
 debugger.A_DontScrewWith = true -- !!!
 debugger.B_TheVariables  = true -- !!!
