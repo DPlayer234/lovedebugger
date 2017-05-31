@@ -965,11 +965,14 @@ function debugger.draw()
 
 		local _,wrap = font:getWrap(lgtemp,tt)
 		local hlg = #wrap*fheight
-		local tw = font:getWidth("~0000000 KB\n0.000000 sec.")
+		local tw
 
 		lgraphics.setColor(color.bgNotActive)
 		lgraphics.rectangle("fill",0,0,tt,hlg)
-		lgraphics.rectangle("fill",w-tw,0,tw,3*fheight)
+		if not debugger.useTitleBar then
+			tw = font:getWidth("~0000000 KB\n0.000000 sec.")
+			lgraphics.rectangle("fill",w-tw,0,tw,3*fheight)
+		end
 
 		lgraphics.setColor(color.fgNotActive)
 		if debugger.printArea > 0 then
