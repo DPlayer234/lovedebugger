@@ -1127,10 +1127,44 @@ if debug then
 					error("attempt to set invalid upvalue",2)
 				end
 			end,
-			__metatable = false
+			--__metatable = false
 		}
 
 		if desc and jitfuncinfo then
+			local amount,bytes = 1,5
+			local hardnames = {
+				[realPrint] = "print"
+			}
+			local indexed = {
+				[_G] = true,
+				[package.loaded] = true
+			}
+			local function addName(item,path)
+				if not hardnames[item] then
+					if type(item) == "table" then
+						if not indexed[item] then
+							indexed[item] = true
+							for k,v in pairs(item) do
+								addName(v,path.."."..k)
+							end
+						end
+					elseif type(item) == "function" then
+						hardnames[item] = path
+						amount = amount + 1
+						bytes = bytes + #path
+					end
+				end
+			end
+			for i,v in ipairs{
+				"assert", "collectgarbage", "dofile", "error", "gcinfo", "getfenv", "getmetatable", "ipairs", "load", "loadfile", "loadstring",
+					"module", "newproxy", "next", "pairs", "pcall", "rawequal", "rawget", "rawset", "require", "select",
+					"setfenv", "setmetatable", "type", "tonumber", "tostring", "unpack", "xpcall",
+				"bit", "coroutine", "debug", "io", "jit", "love", "math", "os", "string", "table", "package"
+			} do
+				addName(_G[v],v)
+			end
+			addName(debugger,"debugger")
+
 			local names = setmetatable({},{
 				__index = function(t,f)
 					local v
@@ -1163,6 +1197,11 @@ if debug then
 
 					if v then
 						v = "function: "..v
+						if hardnames[f] then
+							hardnames[f] = nil
+						end
+					elseif hardnames[f] then
+						v = "function: "..hardnames[f]
 					else
 						local __tostring = funcMeta.__tostring
 						funcMeta.__tostring = nil
@@ -1178,6 +1217,10 @@ if debug then
 			function funcMeta:__tostring()
 				return names[self]
 			end
+
+			local out = "\tAdded "..tostring(amount).." function names for predefined functions, totalling "..tostring(bytes).." characters."
+			realPrint(out)
+			proxyPrint(color.blue,out)
 		end
 
 		debug.setmetatable(function()end,funcMeta)
