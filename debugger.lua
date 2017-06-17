@@ -50,9 +50,9 @@ local tostring = function(t)
 	return s and r or ":ERROR:"
 end
 local error = error
-local debug = require("debug")
 
 -- Dependencies, yes, I require those. *BADUM-TSS*
+local debug = require("debug")
 local utf8 = require("utf8")
 local love = require("love")
 if not love.keyboard then require("love.keyboard") end
@@ -433,12 +433,13 @@ function debugger.setActive(status)
 end
 
 local indexFunctions = false
+local updateEvents = {}
 
 local updateTime = 0
 -- Update Function
 local fromPattern = "%[\"[_a-zA-Z][_a-zA-Z0-9]-\"%]"
 local nicerPush = function(t) return "."..string.sub(t,3,#t-2) end
-function debugger.update()
+function debugger.update(dt)
 	if inputs[debugger.activate] then
 		debugger.setActive()
 	end
@@ -505,7 +506,7 @@ function debugger.update()
 
 			texttable = {}
 			textPosition = 1
-			if textinput:find("^[/\\=!:,%.%%%*]") then
+			if textinput:find("^[/\\!:%.%*]") then
 				-- A command. Has to be.
 				local args = {}
 				for match in textinput:gmatch("%S+") do
@@ -581,31 +582,31 @@ function debugger.update()
 					realPrint(out)
 					proxyPrint(color.red,out)
 				end
-			elseif textinput:match(".+%(.-%).*") == textinput or textinput:match("[^%(%)]+") then
+			elseif textinput:find("^=") then
 				-- Attempting return to print that on the screen
-				local r = { pcall(loadstring("return "..textinput,"prompt")) }
+				local r = { pcall(loadstring("return "..textinput:sub(2,#textinput),"prompt")) }
 				if r[1] == true then
-					table.remove(r,1)
-					for i,v in ipairs(r) do r[i] = type(v)..":"..tostring(v) end
+					--for i,v in ipairs(r) do r[i] = type(v)..":"..tostring(v) end
+					local max = 0
+					for i,v in pairs(r) do if i > max then max = i end end
+					for i=2, max do r[i-1] = r[i] r[i] = nil end
+					for i=1, max-1 do
+						local v = r[i]
+						if v == nil then
+							r[i] = tostring(i)..":nil"
+						else
+							r[i] = tostring(i)..":"..type(v)..":"..tostring(v)
+						end
+					end
 					if #r > 0 then
-						local out = ":"..table.concat(r,"\t")
+						local out = ":"..table.concat(r,"\t:")
 						realPrint(out)
 						proxyPrint(color.yellow,out)
 					end
 				else
-					-- Other
-					if tostring(r[2]) == "attempt to call a nil value" then
-						local success,err = pcall(loadstring(textinput,"prompt"))
-						if not success then
-							local out = ":ERROR:"..tostring(err)
-							realPrint(out)
-							proxyPrint(color.red,out)
-						end
-					else
-						local out = ":ERROR:"..tostring(r[2])
-						realPrint(out)
-						proxyPrint(color.red,out)
-					end
+					local out = ":ERROR:"..tostring(r[2])
+					realPrint(out)
+					proxyPrint(color.red,out)
 				end
 			else
 				-- Other
@@ -614,6 +615,10 @@ function debugger.update()
 					local out = ":ERROR:"..tostring(err)
 					realPrint(out)
 					proxyPrint(color.red,out)
+				elseif err ~= nil then
+					local out = ":"..tostring(err)
+					realPrint(out)
+					proxyPrint(color.yellow,out)
 				end
 			end
 		end
@@ -763,7 +768,34 @@ function debugger.update()
 		inputs[k] = nil
 	end
 
+	for i=1,#updateEvents do
+		local s,r = pcall(updateEvents[i].func,dt)
+		if not s then
+			local out = ":ERROR:"..tostring(r)
+			realPrint(out)
+			proxyPrint(color.red,out)
+		end
+	end
+
 	updateTime = dep.getTime()
+end
+
+function debugger.addUpdate(func,prio)
+	local this = {
+		func = func,
+		prio = prio or 0
+	}
+
+	updateEvents[#updateEvents+1] = this
+	table.sort(updateEvents,function(a,b)
+		return a.prio > b.prio
+	end)
+
+	for i=1,#updateEvents do
+		if updateEvents[i] == this then
+			return i
+		end
+	end
 end
 
 local function count(str,patt)
@@ -1028,210 +1060,202 @@ function debugger.newCommand(name,args,func)
 	commands[name][#commands[name]+1] = c
 end
 
-if debug then
-	-- Up-Value-getter
-	function debugger.allowFunctionIndex(desc)
-		indexFunctions = true
-		local out = "\tAllowing the indexing of functions for up-values might cause code-instability.\nTherefore access to indexing is only allowed within the command line."
-		realPrint(out)
-		proxyPrint(color.red,out)
+-- Up-Value-getter
+function debugger.allowFunctionIndex(desc)
+	indexFunctions = true
+	local out = "\tAllowing the indexing of functions for up-values might cause code-instability.\nTherefore access to indexing is only allowed within the command line."
+	realPrint(out)
+	proxyPrint(color.red,out)
 
-		local getupvalue = debug.getupvalue
-		local setupvalue = debug.setupvalue
-		local traceback  = debug.traceback
-		local jitfuncinfo, isFile, lines
-		pcall(function()
-			jitfuncinfo = require("jit").util.funcinfo
+	local getupvalue = debug.getupvalue
+	local setupvalue = debug.setupvalue
+	local traceback  = debug.traceback
+	local jitfuncinfo, isFile, lines
+	pcall(function()
+		jitfuncinfo = require("jit").util.funcinfo
 
-			local filesystem = require("love.filesystem")
-			isFile = filesystem.isFile
-			lines = filesystem.lines
-		end)
+		local filesystem = require("love.filesystem")
+		isFile = filesystem.isFile
+		lines = filesystem.lines
+	end)
 
-		local codepath = traceback():match("^stack traceback:%s*(.-):")
-		local allowed = "[string \"prompt\"]:1:"
+	local codepath = traceback():match("^stack traceback:%s*(.-):")
+	local allowed = "[string \"prompt\"]:1:"
 
-		local upval = setmetatable({},{__mode = "kv"})
-		local ret = setmetatable({},{__mode = "kv",__index=function()return{}end})
-		local getlist = function(f)
-			if upval[f] then
-				return upval[f]
-			else
-				local fup = {}
+	local upval = setmetatable({},{__mode = "kv"})
+	local ret = setmetatable({},{__mode = "kv",__index=function()return{}end})
+	local getlist = function(f)
+		if upval[f] then
+			return upval[f]
+		else
+			local fup = {}
 
-				local i = 1
-				local k,v = getupvalue(f,i)
-				while k do
-					fup[k] = i
-					i = i + 1
-					k,v = getupvalue(f,i)
-				end
-
-				upval[f] = fup
-				return fup
+			local i = 1
+			local k,v = getupvalue(f,i)
+			while k do
+				fup[k] = i
+				i = i + 1
+				k,v = getupvalue(f,i)
 			end
+
+			upval[f] = fup
+			return fup
 		end
+	end
 
-		local funcMeta = {
-			__index = function(f,k)
-				local traceback = traceback()
-				local illegal = true
-				if traceback:find(codepath,1,true) then illegal = false end
-				if traceback:find(allowed ,1,true) then illegal = false end
-				if illegal then error("attempt to index a function value",2) end
+	local funcMeta = {
+		__index = function(f,k)
+			local traceback = traceback()
+			local illegal = true
+			if traceback:find(codepath,1,true) then illegal = false end
+			if traceback:find(allowed ,1,true) then illegal = false end
+			if illegal then error("attempt to index a function value",2) end
 
-				local fup = getlist(f)
+			local fup = getlist(f)
 
-				if k == "___allupvalues" then
-					local t = ret[f]
-					local _
-					for k,v in pairs(fup) do _,t[k] = getupvalue(f,v) end
-					return t
-				elseif k == "___code" then
-					if jitfuncinfo then
-						local info = jitfuncinfo(f)
-						local source = (info.source or ""):gsub("^@","")
-						if isFile(source) then
-							local i = 0
-							local codelines = {}
-							for line in lines(source) do
-								i = i + 1
-								-- linedefined, lastlinedefined, params
-								if i >= info.linedefined then
-									codelines[#codelines+1] = line
-									if i >= info.lastlinedefined then
-										break
-									end
-								end
-							end
-
-							return table.concat(codelines,"\n")
-						else
-							error("unable to find code file")
-						end
-					else
-						error("Cannot get code... No JIT utils?")
-					end
-				elseif fup[k] then
-					local k,v = getupvalue(f,fup[k])
-					return v
-				else
-					error("attempt to get invalid upvalue",2)
-				end
-			end,
-			__newindex = function(f,k,v)
-				local fup = getlist(f)
-				if fup[k] then
-					setupvalue(f,fup[k],v)
-				else
-					error("attempt to set invalid upvalue",2)
-				end
-			end,
-			--__metatable = false
-		}
-
-		if desc and jitfuncinfo then
-			local amount,bytes = 1,5
-			local hardnames = {
-				[realPrint] = "print"
-			}
-			local indexed = {
-				[_G] = true,
-				[package.loaded] = true
-			}
-			local function addName(item,path)
-				if not hardnames[item] then
-					if type(item) == "table" then
-						if not indexed[item] then
-							indexed[item] = true
-							for k,v in pairs(item) do
-								addName(v,path.."."..k)
-							end
-						end
-					elseif type(item) == "function" then
-						hardnames[item] = path
-						amount = amount + 1
-						bytes = bytes + #path
-					end
-				end
-			end
-			for i,v in ipairs{
-				"assert", "collectgarbage", "dofile", "error", "gcinfo", "getfenv", "getmetatable", "ipairs", "load", "loadfile", "loadstring",
-					"module", "newproxy", "next", "pairs", "pcall", "rawequal", "rawget", "rawset", "require", "select",
-					"setfenv", "setmetatable", "type", "tonumber", "tostring", "unpack", "xpcall",
-				"bit", "coroutine", "debug", "io", "jit", "love", "math", "os", "string", "table", "package"
-			} do
-				addName(_G[v],v)
-			end
-			addName(debugger,"debugger")
-
-			local names = setmetatable({},{
-				__index = function(t,f)
-					local v
-
+			if k == "___allupvalues" then
+				local t = ret[f]
+				local _
+				for k,v in pairs(fup) do _,t[k] = getupvalue(f,v) end
+				return t
+			elseif k == "___code" then
+				if jitfuncinfo then
 					local info = jitfuncinfo(f)
 					local source = (info.source or ""):gsub("^@","")
-					local linedefined = info.linedefined
-					if isFile(source) and linedefined then
+					if isFile(source) then
 						local i = 0
-						local defined
+						local codelines = {}
 						for line in lines(source) do
 							i = i + 1
 							-- linedefined, lastlinedefined, params
-							if i >= linedefined then
-								defined = " "..line.." "
-								break
-							end
-						end
-						if defined then
-							v = defined:match("[^_a-zA-Z0-9]function%s+([_a-zA-Z][%.%:_a-zA-Z0-9]*)[^_a-zA-Z0-9]")
-							if not v then
-								v = defined:match("[^_a-zA-Z0-9]([_a-zA-Z][%.%:_a-zA-Z0-9]*)%s*=%s*%(*function[^_a-zA-Z0-9]")
-								if not v then
-									v = "(unnamed)"
+							if i >= info.linedefined then
+								codelines[#codelines+1] = line
+								if i >= info.lastlinedefined then
+									break
 								end
 							end
-							v = v.." ("..source..":"..tostring(linedefined)..")"
 						end
-					end
 
-					if v then
-						v = "function: "..v
-						if hardnames[f] then
-							hardnames[f] = nil
-						end
-					elseif hardnames[f] then
-						v = "function: "..hardnames[f]
+						return table.concat(codelines,"\n")
 					else
-						local __tostring = funcMeta.__tostring
-						funcMeta.__tostring = nil
-						v = tostring(f)
-						funcMeta.__tostring = __tostring
+						error("unable to find code file")
 					end
-
-					t[f] = v
-					return v
-				end,
-				__mode = "kv"
-			})
-			function funcMeta:__tostring()
-				return names[self]
+				else
+					error("Cannot get code... No JIT utils?")
+				end
+			elseif fup[k] then
+				local k,v = getupvalue(f,fup[k])
+				return v
+			else
+				error("attempt to get invalid upvalue",2)
 			end
+		end,
+		__newindex = function(f,k,v)
+			local fup = getlist(f)
+			if fup[k] then
+				setupvalue(f,fup[k],v)
+			else
+				error("attempt to set invalid upvalue",2)
+			end
+		end,
+		--__metatable = false
+	}
 
-			local out = "\tAdded "..tostring(amount).." function names for predefined functions, totalling "..tostring(bytes).." characters."
-			realPrint(out)
-			proxyPrint(color.blue,out)
+	if desc and jitfuncinfo then
+		local amount,bytes = 1,5
+		local hardnames = {
+			[realPrint] = "print"
+		}
+		local indexed = {
+			[_G] = true,
+			[package.loaded] = true
+		}
+		local function addName(item,path)
+			if not hardnames[item] then
+				if type(item) == "table" then
+					if not indexed[item] then
+						indexed[item] = true
+						for k,v in pairs(item) do
+							addName(v,path.."."..k)
+						end
+					end
+				elseif type(item) == "function" then
+					hardnames[item] = path
+					amount = amount + 1
+					bytes = bytes + #path
+				end
+			end
 		end
+		for i,v in ipairs{
+			"assert", "collectgarbage", "dofile", "error", "gcinfo", "getfenv", "getmetatable", "ipairs", "load", "loadfile", "loadstring",
+			"module", "newproxy", "next", "pairs", "pcall", "rawequal", "rawget", "rawset", "require", "select",
+			"setfenv", "setmetatable", "type", "tonumber", "tostring", "unpack", "xpcall",
+			"bit", "coroutine", "debug", "io", "jit", "love", "math", "os", "string", "table", "package"
+		} do
+			addName(_G[v],v)
+		end
+		addName(debugger,"debugger")
 
-		debug.setmetatable(function()end,funcMeta)
-	end
-else
-	function debugger.allowFunctionIndex()
-		local out = "\tCould not find the default debug library! Therefore function indexing cannot be enabled..."
-		realPrint(out)
-		proxyPrint(color.red,out)
-	end
-end
+		local names = setmetatable({},{
+			__index = function(t,f)
+				local v
+
+				local info = jitfuncinfo(f)
+				local source = (info.source or ""):gsub("^@","")
+				local linedefined = info.linedefined
+				if isFile(source) and linedefined then
+					local i = 0
+					local defined
+					for line in lines(source) do
+						i = i + 1
+						-- linedefined, lastlinedefined, params
+						if i >= linedefined then
+							defined = " "..line.." "
+							break
+						end
+					end
+					if defined then
+						v = defined:match("[^_a-zA-Z0-9]function%s+([_a-zA-Z][%.%:_a-zA-Z0-9]*)[^_a-zA-Z0-9]")
+							if not v then
+								v = defined:match("[^_a-zA-Z0-9]([_a-zA-Z][%.%:_a-zA-Z0-9]*)%s*=%s*%(*function[^_a-zA-Z0-9]")
+									if not v then
+										v = "(unnamed)"
+									end
+								end
+								v = v.." ("..source..":"..tostring(linedefined)..")"
+							end
+						end
+
+						if v then
+							v = "function: "..v
+								if hardnames[f] then
+									hardnames[f] = nil
+								end
+							elseif hardnames[f] then
+								v = "function: "..hardnames[f]
+								else
+									local __tostring = funcMeta.__tostring
+									funcMeta.__tostring = nil
+									v = tostring(f)
+									funcMeta.__tostring = __tostring
+								end
+
+								t[f] = v
+								return v
+							end,
+							__mode = "kv"
+						})
+						function funcMeta:__tostring()
+							return names[self]
+						end
+
+						local out = "\tAdded "..tostring(amount).." function names for predefined functions, totalling "..tostring(bytes).." characters."
+							realPrint(out)
+							proxyPrint(color.blue,out)
+						end
+
+						debug.setmetatable(function()end,funcMeta)
+					end
 
 function debugger.monitorGlobal(writeTo)
 	if type(writeTo) ~= "string" then writeTo = "_G (log).txt" end
@@ -1310,7 +1334,7 @@ setmetatable(debugger,{
 
 		if __update then
 			function other.update(...)
-				local s,r = pcall(self.update)
+				local s,r = pcall(self.update,...)
 				if not s then
 					realPrint(r)
 				end
@@ -1319,7 +1343,7 @@ setmetatable(debugger,{
 			end
 		else
 			function other.update(...)
-				local s,r = pcall(self.update)
+				local s,r = pcall(self.update,...)
 				if not s then
 					realPrint(r)
 				end
