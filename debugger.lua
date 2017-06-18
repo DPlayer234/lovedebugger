@@ -1047,19 +1047,6 @@ function debugger.isActive()
 	return active
 end
 
-function debugger.newCommand(name,args,func)
-	assert(type(name) == "string", "Command Name has to be a string!")
-	assert(type(args) == "string", "Argument Pattern has to be a string!")
-	assert(type(func) == "function" or getmetatable(func) and rawget(getmetatable(func),"__call"), "Argument function needs to be callable!")
-
-	if commands[name] == nil then commands[name] = {} end
-	local c = {
-		args = args,
-		func = func
-	}
-	commands[name][#commands[name]+1] = c
-end
-
 -- Up-Value-getter
 function debugger.allowFunctionIndex(desc)
 	indexFunctions = true
@@ -1216,46 +1203,46 @@ function debugger.allowFunctionIndex(desc)
 					end
 					if defined then
 						v = defined:match("[^_a-zA-Z0-9]function%s+([_a-zA-Z][%.%:_a-zA-Z0-9]*)[^_a-zA-Z0-9]")
+						if not v then
+							v = defined:match("[^_a-zA-Z0-9]([_a-zA-Z][%.%:_a-zA-Z0-9]*)%s*=%s*%(*function[^_a-zA-Z0-9]")
 							if not v then
-								v = defined:match("[^_a-zA-Z0-9]([_a-zA-Z][%.%:_a-zA-Z0-9]*)%s*=%s*%(*function[^_a-zA-Z0-9]")
-									if not v then
-										v = "(unnamed)"
-									end
-								end
-								v = v.." ("..source..":"..tostring(linedefined)..")"
+								v = "(unnamed)"
 							end
 						end
-
-						if v then
-							v = "function: "..v
-								if hardnames[f] then
-									hardnames[f] = nil
-								end
-							elseif hardnames[f] then
-								v = "function: "..hardnames[f]
-								else
-									local __tostring = funcMeta.__tostring
-									funcMeta.__tostring = nil
-									v = tostring(f)
-									funcMeta.__tostring = __tostring
-								end
-
-								t[f] = v
-								return v
-							end,
-							__mode = "kv"
-						})
-						function funcMeta:__tostring()
-							return names[self]
-						end
-
-						local out = "\tAdded "..tostring(amount).." function names for predefined functions, totalling "..tostring(bytes).." characters."
-							realPrint(out)
-							proxyPrint(color.blue,out)
-						end
-
-						debug.setmetatable(function()end,funcMeta)
+						v = v.." ("..source..":"..tostring(linedefined)..")"
 					end
+				end
+
+				if v then
+					v = "function: "..v
+					if hardnames[f] then
+						hardnames[f] = nil
+					end
+				elseif hardnames[f] then
+					v = "function: "..hardnames[f]
+				else
+					local __tostring = funcMeta.__tostring
+					funcMeta.__tostring = nil
+					v = tostring(f)
+					funcMeta.__tostring = __tostring
+				end
+
+				t[f] = v
+				return v
+			end,
+			__mode = "kv"
+		})
+		function funcMeta:__tostring()
+			return names[self]
+		end
+
+		local out = "\tAdded "..tostring(amount).." function names for predefined functions, totalling "..tostring(bytes).." characters."
+		realPrint(out)
+		proxyPrint(color.blue,out)
+	end
+
+	debug.setmetatable(function()end,funcMeta)
+end
 
 function debugger.monitorGlobal(writeTo)
 	if type(writeTo) ~= "string" then writeTo = "_G (log).txt" end
@@ -1296,6 +1283,19 @@ function debugger.monitorGlobal(writeTo)
 	})
 end
 
+function debugger.newCommand(name,args,func)
+	assert(type(name) == "string","Command Name has to be a string!")
+	assert(type(args) == "string","Argument Pattern has to be a string!")
+	assert(type(func) == "function" or getmetatable(func) and rawget(getmetatable(func),"__call"),"Argument function needs to be callable!")
+
+	if commands[name] == nil then commands[name] = {} end
+	local c = {
+		args = args,
+		func = func
+	}
+	commands[name][#commands[name]+1] = c
+end
+
 -- Adding some default commands!
 debugger.newCommand("index" ,"" ,debugger.allowFunctionIndex)
 debugger.newCommand("index" ,"b",debugger.allowFunctionIndex)
@@ -1317,9 +1317,41 @@ debugger.newCommand("to"    ,"s",function(s)
 end)
 debugger.newCommand("loc","",function() return ":Currently at "..display end)
 
-debugger.A_DontScrewWith = true -- !!!
-debugger.B_TheVariables  = true -- !!!
-debugger.C_OrItMayBreak  = true -- !!!
+debugger.newCommand("help","",function()
+	local all = {}
+	for k,v in pairs(commands) do
+		all[#all+1] = "\t"..k
+	end
+	table.sort(all)
+	table.insert(all,1,"All available commands:")
+	return table.concat(all,"\n")
+end)
+debugger.newCommand("help","s",function(s)
+	local cmd = commands[s]
+	if cmd then
+		local all = {}
+		local replace = {
+			s = "<string>",
+			n = "<number>",
+			b = "<boolean>"
+		}
+		for i,v in ipairs(cmd) do
+			local x = v.args:gsub("",", ")
+			all[#all+1] = "\t"..x:sub(2,#x-2):gsub(".",replace)
+		end
+		table.sort(all)
+		table.insert(all,1,"Usage: /"..s)
+		return table.concat(all,"\n")
+	elseif s == "me" then
+		return ":You might need professional help if you ask a debugging tool..."
+	else
+		return ":Unknown command."
+	end
+end)
+
+debugger["0 - Don't screw with"] = true -- !!!
+debugger["1 - the variables or"] = true -- !!!
+debugger["2 - it may break!"]    = true -- !!!
 
 setmetatable(debugger,{
 	__call = function(self,other,cb)
