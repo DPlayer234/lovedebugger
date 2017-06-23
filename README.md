@@ -19,6 +19,7 @@ local debugger = require "debugger" ()
 This will override/inject the update functions and required callbacks. If this is not to your liking, you may also do all this manually:
 
 ```lua
+-- Probably in your main.lua or something...
 local debugger
 
 function love.load(arg)
@@ -28,13 +29,13 @@ end
 
 function love.update(dt)
 	-- Anywhere is fine, preferably the first line
-	debugger.update()
+	debugger.update(dt)
 
-	-- Your Code
+	-- Your Update Code...
 end
 
 function love.draw()
-	-- Your Code
+	-- Your Draw Code...
 
 	-- The Draw function needs to be the last line of the love.draw!
 	debugger.draw()
@@ -43,11 +44,48 @@ end
 
 *Do not change your callbacks after this point, or something may break.* This should not be a concern in most cases however.
 
-To open the Lua prompt and environment, hit 'F4'.
+To open the Lua prompt and environment, hit 'F4' (debugger.activate).
 
 At the bottom is said Lua prompt, at the right is said global environment. Use the keyboard to type code into the prompt, hit 'Return' to confirm and execute it.
 
-The environment is navigated solely with your mouse and Shift key:
+Additionally, it supports commands. Commands can be accessed by prefixing a command's name with '/', '\\', '!', ':', '.', or '\*' and listing all arguments separated with spaces. By default, it comes with the following ones:
+
+```
+/command [optional]
+	Information
+
+/index [nicer_name]
+	The same as debugger.allowFunctionIndex(nicer_name).
+/global [path]
+	The same as debugger.monitorGlobal(path).
+/clear
+	Clears all prints from the screen.
+/to [path]
+	Moves to the defined location in the environment. No arguments means back to the root.
+/loc
+	Displays the current location in the environment.
+/help [command]
+	Either lists all commands, or if the name of one is passed, shows all valid argument patterns.
+```
+
+You can also add custom commands like so:
+
+```lua
+debugger.newCommand(name, arg_pattern, func)
+-- The argument pattern is a string. Every character represents an argument.
+-- 's' means a string is expected, 'n' a number and 'b' a boolean.
+-- There can be multiple commands with the same name and different arguments.
+-- Commands added earlier are always prioritized.
+-- If the passed function returns anything, this will printed to the screen in yellow.
+
+-- Example:
+debugger.newCommand("ret", "snb", function(string, number, boolean)
+	return string..tostring(number)..tostring(boolean)
+end)
+-- This can now be called as '/ret hi 5 false' and will print 'hi5false' to the screen.
+```
+
+Now to the environment. It is navigated solely with your mouse and Shift key:
 
 ```
 L = Left Mouse Button
@@ -67,7 +105,7 @@ Clicking a variable name:
 
 You can also use the arrow keys (up and down) to bring back previous inputs to the Lua prompt. Ctrl+V (pasting) and Ctrl+C (copying the entire prompt) is also supported.
 
-'F5' will toggle whether print calls will be drawn to the screen while the Lua prompt is disabled or clear the current input in the Lua prompt.
+'F5' (debugger.clearPrompt) will toggle whether print calls will be drawn to the screen while the Lua prompt is disabled or clear the current input in the Lua prompt.
 
 ---
 
@@ -114,6 +152,10 @@ debugger.monitorGlobal(writeTo)
 -- (by which I mean, new definitions, accessing unused variables etc.).
 -- 'writeto' is the file path (within the Löve save directory) to write the output to.
 -- Defaults to '_G (log).txt'.
+
+debugger.addUpdate(func, priority)
+-- Adds a function to be called every frame. The function is passed dt (if dt is passed
+-- to debugger.update).
 ```
 
 There's also a few constants that you may modify as well as their defaults:
@@ -139,6 +181,9 @@ debugger.maxStorage  = 100
 
 debugger.doTempPrint = true
 -- Whether or not to print to the screen if the console is closed.
+
+debugger.useTitleBar = true
+-- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar.
 
 debugger.color = {...}
 -- A list of several colors used by the debugger, most notably:
