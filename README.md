@@ -16,7 +16,7 @@ local debugger = require "debugger" ()
 -- Calling the module makes it return itself
 ```
 
-This will override/inject the update functions and required callbacks. If this is not to your liking, you may also do all this manually:
+This will override/monkey-patch the update functions and required callbacks. If this is not to your liking, you may also do all this manually:
 
 ```lua
 -- Probably in your main.lua or something...
@@ -25,6 +25,8 @@ local debugger
 function love.load(arg)
 	debugger = require "debugger"
 	debugger.setOverrides()
+	-- You cannot easily circumvent letting the debugger monkey-patch
+	-- some callbacks. Sorry. :/
 end
 
 function love.update(dt)
@@ -140,12 +142,12 @@ debugger.setActive(active)
 debugger.isActive()
 -- Returns whether the Lua prompt is active
 
-debugger.allowFunctionIndex(desc)
+debugger.allowFunctionIndex(nicer_name)
 -- Enables function indexing, allowing you to browse the upvalues
 -- of functions by Shift-Left-Clicking them in the environment.
 -- The optional argument is whether or not to also give functions
 -- better 'tostring' values (more easily readable/descriptive),
--- like 'function: lib.func (lib.lua:4)'.
+-- like 'function: lib.func (lib.lua:4)' at the cost of some speed.
 
 debugger.monitorGlobal(writeTo)
 -- Enables monitoring the global environment for unusual changes or activities
@@ -158,7 +160,7 @@ debugger.addUpdate(func, priority)
 -- to debugger.update).
 ```
 
-There's also a few constants that you may modify as well as their defaults:
+There's also a few constants that you may modify as well:
 
 ```lua
 debugger.activate    = "f4"
@@ -184,12 +186,22 @@ debugger.doTempPrint = true
 
 debugger.useTitleBar = true
 -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar.
+-- If false, will always display it in the upper-right corner of the window instead.
 
 debugger.color = {...}
 -- A list of several colors used by the debugger, most notably:
 -- fgActive, fgActive2, bgActive,
 -- fgNotActive, bgNotActive
 ```
+
+---
+
+## Other Things
+
+* The environment location at the top may glitch out and not tell you an entirely correct path if unexpected key names are used.
+* It always uses 'debug.getmetatable' rather than 'getmetatable'. Therefore it can access metatables even if those have a '\_\_metatable' key.
+* The variable 'getmetatable' is overriden by 'debug.getmetatable' within the Lua prompt.
+* This tool monkey-patches Lua's 'print' (but not 'io.write') function. The original function is stored as 'debugger.realPrint'.
 
 ---
 

@@ -15,7 +15,7 @@ debugger.doTempPrint = true -- Whether or not to print to the screen if the cons
 debugger.maxStorage  = 100  -- How many console inputs are stored to be reused (by using 'Up' and 'Down' arrow keys). (Default: 100)
 debugger.useTitleBar = true -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar. (Default: true)
 
-debugger.color = {           -- Various colors used
+debugger.color = {          -- Various colors used
 	-- Active:
 	bgActive = {  0,  0,  0,127},
 	fgActive = {255,255,255,255},
@@ -36,7 +36,7 @@ debugger.color = {           -- Various colors used
 -- debugger.print(...) will print text to the debugger's console exclusively.
 -- Controller/Joystick inputs won't be disabled, so feel free to use a controller while testing/debugging.
 local collectgarbage = collectgarbage
-local setmetatable, getmetatable = setmetatable, getmetatable
+local setmetatable, getmetatable = setmetatable, debug.getmetatable
 local rawset, rawget = rawset, rawget
 local table, string, math = table, string, math
 local require = require
@@ -570,7 +570,7 @@ function debugger.update(dt)
 				end
 			elseif textinput:match("[_a-zA-Z0-9%.%[%]\"']+%s*=[^=].*") == textinput then
 				-- Probably Variable assignment
-				local success, err = pcall(loadstring(textinput, "prompt"))
+				local success, err = pcall(loadstring("local getmetatable=...;"..textinput, "prompt"), getmetatable)
 				if success then
 					printColor(color.yellow, ":Set variable "..textinput)
 				else
@@ -578,11 +578,11 @@ function debugger.update(dt)
 				end
 			else
 				-- Attempting return to print that on the screen
-				local f = loadstring("return "..textinput, "prompt")
+				local f = loadstring("local getmetatable=...;return "..textinput, "prompt")
 				if not f then
-					f = loadstring(textinput, "prompt")
+					f = loadstring("local getmetatable=...;"..textinput, "prompt")
 				end
-				local r = { pcall(f) }
+				local r = { pcall(f, getmetatable) }
 				if r[1] == true then
 					if #r > 1 then
 						--for i,v in ipairs(r) do r[i] = type(v)..":"..tostring(v) end
@@ -624,7 +624,7 @@ function debugger.update(dt)
 		end
 
 		-- Other crap with the environment (mostly navigation)
-		local s, dv = pcall(loadstring("return "..display))
+		local s, dv = pcall(loadstring("local getmetatable=... return "..display), getmetatable)
 
 		if type(dv) == "table" then
 			index = sortedTable(dv, index)
@@ -652,7 +652,7 @@ function debugger.update(dt)
 							ndisplay = display.."["..(ntype=="string" and string.format("%q", ntext) or tostring(ntext)).."]"
 						end
 
-						local s, dv = pcall(loadstring("return "..ndisplay))
+						local s, dv = pcall(loadstring("local getmetatable=... return "..ndisplay), getmetatable)
 						if s and type(dv) == "table" and inputs.m1 then
 							-- LMB
 							-- Navigating to another table
@@ -682,13 +682,13 @@ function debugger.update(dt)
 							end
 						else
 							-- Copying the variable name to the prompt
-							for p,c in utf8.codes(ndisplay:gsub(fromPattern, nicerPush)) do
+							for p,c in utf8.codes(ndisplay:gsub("_G", "", 1):gsub(fromPattern, nicerPush)) do
 								override.textinput(utf8.char(c))
 							end
 						end
 					else
 						-- Copying the variable name to the prompt
-						for p,c in utf8.codes(display:gsub(fromPattern, nicerPush)) do
+						for p,c in utf8.codes(display:gsub("_G", "", 1):gsub(fromPattern, nicerPush)) do
 							override.textinput(utf8.char(c))
 						end
 					end
@@ -728,7 +728,7 @@ function debugger.update(dt)
 							end
 						end
 
-						local s, dv = pcall(loadstring("return "..display))
+						local s, dv = pcall(loadstring("local getmetatable=... return "..display), getmetatable)
 						if s then
 							if type(dv) == "table" then
 								index = sortedTable(dv, index)
@@ -844,7 +844,7 @@ function debugger.draw()
 		local hlg = #wrap*fheight
 
 		local varprint
-		local success, v = pcall(loadstring("return "..display))
+		local success, v = pcall(loadstring("local getmetatable=... return "..display), getmetatable)
 		local vartype
 		if success and v then
 			varprint = v
@@ -917,7 +917,7 @@ function debugger.draw()
 		end
 
 		-- Variable Path
-		local path = (display == "_G" and "env" or "env > "..display):gsub("%[\"", " > "):gsub("\"%]", "")
+		local path = (display == "_G" and "..." or "> "..display):gsub("getmetatable%(", "Meta("):gsub("%[\"", " > "):gsub("\"%]", ""):gsub(" ", " ")
 		if font:getWidth("\t"..path) > w-tt then
 			while font:getWidth("\t…"..path) > w-tt do
 				local byteoffset = utf8.offset(path, 2)
@@ -1290,7 +1290,7 @@ debugger.newCommand("to", "s", function(s)
 	yScroll = 1
 	return ":Moved to "..display.."."
 end)
-debugger.newCommand("loc", "", function() return ":Currently at "..display end)
+debugger.newCommand("loc", "", function() return ":Currently at "..display:gsub(fromPattern, nicerPush) end)
 
 debugger.newCommand("help", "", function()
 	local all = {}
