@@ -1029,6 +1029,22 @@ function debugger.isActive()
 	return active
 end
 
+local notInDebugger
+do
+	local traceback = debug.traceback
+
+	local codepath = traceback():match("^stack traceback:%s*(.-):")
+	local allowed = "[string \"prompt\"]:1:"
+
+	function notInDebugger()
+		local tb = traceback("", 3)
+
+		if tb:find(codepath, 1, true) then return false end
+		if tb:find(allowed , 1, true) then return false end
+		return true
+	end
+end
+
 -- Up-Value-getter
 function debugger.allowFunctionIndex(desc)
 	indexFunctions = true
@@ -1045,9 +1061,6 @@ function debugger.allowFunctionIndex(desc)
 		isFile = filesystem.isFile
 		lines = filesystem.lines
 	end)
-
-	local codepath = traceback():match("^stack traceback:%s*(.-):")
-	local allowed = "[string \"prompt\"]:1:"
 
 	local upval = setmetatable({}, {__mode = "kv"})
 	local ret = setmetatable({}, {__mode = "kv", __index=function()return{}end})
@@ -1072,11 +1085,7 @@ function debugger.allowFunctionIndex(desc)
 
 	local funcMeta = {
 		__index = function(f, k)
-			local traceback = traceback()
-			local illegal = true
-			if traceback:find(codepath, 1, true) then illegal = false end
-			if traceback:find(allowed , 1, true) then illegal = false end
-			if illegal then error("attempt to index a function value", 2) end
+			if notInDebugger() then error("attempt to index a function value", 2) end
 
 			local fup = getlist(f)
 
@@ -1233,25 +1242,29 @@ function debugger.monitorGlobal(writeTo)
 
 	local file = love.filesystem.newFile(writeTo, "a")
 
-	local traceback = debug and debug.traceback or function()end
+	local traceback = debug.traceback
 
 	setmetatable(_G, {
 		__newindex = function(t, k, v)
-			local msg = "New global defined: "..tostring(k).."="..tostring(v).." (type "..type(v)..")"
-			printColor(color.blue, msg)
+			if notInDebugger() then
+				local msg = "New global defined: "..tostring(k).."="..tostring(v).." (type "..type(v)..")"
+				printColor(color.blue, msg)
 
-			local tb = traceback(msg, 2)
-			file:write(tb.."\n\n")
-			file:flush()
+				local tb = traceback(msg, 2)
+				file:write(tb.."\n\n")
+				file:flush()
+			end
 			rawset(t, k, v)
 		end,
 		__index = function(t, k)
-			local msg = "Trying to access undefined global: "..tostring(k)
-			printColor(color.blue, msg)
+			if notInDebugger() then
+				local msg = "Trying to access undefined global: "..tostring(k)
+				printColor(color.blue, msg)
 
-			local tb = traceback(msg, 2)
-			file:write(tb.."\n\n")
-			file:flush()
+				local tb = traceback(msg, 2)
+				file:write(tb.."\n\n")
+				file:flush()
+			end
 			return nil
 		end
 	})
@@ -1339,43 +1352,47 @@ setmetatable(debugger, {
 		local __update = other.update
 		local __draw = other.draw
 
-		if __update then
-			function other.update(...)
-				local s, r = pcall(self.update, ...)
-				if not s then
-					realPrint(r)
-				end
+		loadstring([[
+			local self, other, __update, __draw, lgraphics, pcall, realPrint = ...
 
-				__update(...)
-			end
-		else
-			function other.update(...)
-				local s, r = pcall(self.update, ...)
-				if not s then
-					realPrint(r)
-				end
-			end
-		end
+			if __update then
+				function other.update(...)
+					local s, r = pcall(self.update, ...)
+					if not s then
+						realPrint(r)
+					end
 
-		if __draw then
-			function other.draw(...)
-				__draw(...)
+					__update(...)
+				end
+			else
+				function other.update(...)
+					local s, r = pcall(self.update, ...)
+					if not s then
+						realPrint(r)
+					end
+				end
+			end
 
-				local s, r = pcall(self.draw)
-				if not s then
-					lgraphics.pop()
-					realPrint(r)
+			if __draw then
+				function other.draw(...)
+					__draw(...)
+
+					local s, r = pcall(self.draw)
+					if not s then
+						lgraphics.pop()
+						realPrint(r)
+					end
+				end
+			else
+				function other.draw(...)
+					local s, r = pcall(self.draw)
+					if not s then
+						lgraphics.pop()
+						realPrint(r)
+					end
 				end
 			end
-		else
-			function other.draw(...)
-				local s, r = pcall(self.draw)
-				if not s then
-					lgraphics.pop()
-					realPrint(r)
-				end
-			end
-		end
+		]], "run_injection")(self, other, __update, __draw, lgraphics, pcall, realPrint)
 
 		return self
 	end
