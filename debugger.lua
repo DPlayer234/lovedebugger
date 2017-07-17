@@ -682,13 +682,13 @@ function debugger.update(dt)
 							end
 						else
 							-- Copying the variable name to the prompt
-							for p,c in utf8.codes(ndisplay:gsub("_G", "", 1):gsub(fromPattern, nicerPush)) do
+							for p,c in utf8.codes(ndisplay:gsub(fromPattern, nicerPush)) do
 								override.textinput(utf8.char(c))
 							end
 						end
 					else
 						-- Copying the variable name to the prompt
-						for p,c in utf8.codes(display:gsub("_G", "", 1):gsub(fromPattern, nicerPush)) do
+						for p,c in utf8.codes(display:gsub(fromPattern, nicerPush)) do
 							override.textinput(utf8.char(c))
 						end
 					end
