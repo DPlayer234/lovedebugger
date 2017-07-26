@@ -35,11 +35,25 @@ debugger.color = {          -- Various colors used
 -- Call debugger.setFont(Font:Löve-Font-Object) to set the font used by the debugger; default is the font set during initialization.
 -- debugger.print(...) will print text to the debugger's console exclusively.
 -- Controller/Joystick inputs won't be disabled, so feel free to use a controller while testing/debugging.
+local require = require
+
+local debug = require("debug")
+local utf8 = require("utf8")
+local love = require("love")
+if not love.keyboard then require("love.keyboard") end
+if not love.mouse then require("love.mouse") end
+if not love.graphics then require("love.graphics") end
+if not love.event then require("love.event") end
+
 local collectgarbage = collectgarbage
 local setmetatable, getmetatable = setmetatable, debug.getmetatable
 local rawset, rawget = rawset, rawget
+
 local table, string, math = table, string, math
-local require = require
+local insert, remove, concat, sort = table.insert, table.remove, table.concat, table.sort
+local floor, ceil, abs = math.floor, math.ceil, math.abs
+local sub, gsub, gmatch, format, find = string.sub, string.gsub, string.gmatch, string.format, string.find
+
 local type = type
 local pcall = pcall
 local loadstring = loadstring or load
@@ -52,13 +66,6 @@ end
 local error = error
 
 -- Dependencies, yes, I require those. *BADUM-TSS*
-local debug = require("debug")
-local utf8 = require("utf8")
-local love = require("love")
-if not love.keyboard then require("love.keyboard") end
-if not love.mouse then require("love.mouse") end
-if not love.graphics then require("love.graphics") end
-if not love.event then require("love.event") end
 local dep = {getFPS=nil, getTime=nil}
 if love.timer then
 	dep.getFPS = love.timer.getFPS
@@ -103,8 +110,7 @@ local function cloneList(t)
 end
 
 -- Setting the font
-local font
-local fheight
+local font, fheight
 function debugger.setFont(nfont)
 	if nfont:type() == "Font" then
 		font = nfont
@@ -131,8 +137,8 @@ local function checkUtf8(s) for p,c in utf8.codes(s) do end end
 local function getLines(sf)
 	local nl = 0
 	for i,v in ipairs(sf) do
-		if i%2 == 0 then
-			local _, n = v:gsub("\n","\n")
+		if type(v) == "string" then
+			local _, n = gsub(v, "\n", "\n")
 			nl = nl + n
 		end
 	end
@@ -144,7 +150,7 @@ local function proxyPrint(c, ...)
 	local args = {...}
 	local top = 0
 	for i,v in pairs(args) do
-		args[i] = tostring(v):gsub("%z", "\\0")
+		args[i] = gsub(tostring(v), "[%z\r]", "")
 		local s, e = pcall(checkUtf8, args[i])
 		if not s then
 			args[i] = ":ERROR: (utf8)"
@@ -159,27 +165,32 @@ local function proxyPrint(c, ...)
 	end
 
 	if #args < 1 then args[1] = "nil" end
+	args[#args+1] = "\n"
 
-	local t = table.concat(args, "\t"):gsub("\r", "").."\n"
+	local t = concat(args, "\t")
 
 	if t ~= lastPrint then
-		table.insert(lg, c)
-		table.insert(lg, t)
+		local time = dep.getTime()
+		for s in gmatch(t, "[^\n]*\n") do
+			insert(lg, c)
+			insert(lg, s)
 
-		while getLines(lg) > love.graphics.getHeight()/fheight - 1 and #lg > 2 do
-			table.remove(lg, 1)
-			table.remove(lg, 1)
+			insert(lgtemp, c)
+			insert(lgtemp, s)
+
+			insert(lgtime, time)
 		end
 
-		table.insert(lgtemp, c)
-		table.insert(lgtemp, t)
-
-		while getLines(lgtemp) > love.graphics.getHeight()/fheight - 1 and #lgtemp > 2 do
-			table.remove(lgtemp, 1)
-			table.remove(lgtemp, 1)
+		while #lg > 2 and #lg*0.5 > love.graphics.getHeight()/fheight - 1 do
+			remove(lg, 1)
+			remove(lg, 1)
 		end
 
-		table.insert(lgtime, dep.getTime())
+		while #lgtemp > 2 and #lgtemp*0.5 > love.graphics.getHeight()/fheight - 1 do
+			remove(lgtemp, 1)
+			remove(lgtemp, 1)
+		end
+
 		lastPrint = t
 		printedTimes = 1
 	else
@@ -187,7 +198,7 @@ local function proxyPrint(c, ...)
 		if printedTimes == 2 then
 			lg[#lg] = "(2x) "..lg[#lg]
 		else
-			lg[#lg] = lg[#lg]:gsub("^%(%d+x%)", "("..tostring(printedTimes).."x)")
+			lg[#lg] = gsub(lg[#lg], "^%(%d+x%)", "("..tostring(printedTimes).."x)")
 		end
 		if #lgtemp > 1 then
 			lgtemp[#lgtemp] = lg[#lg]
@@ -227,7 +238,7 @@ end
 -- This function will affect the order of the environment display.
 -- You may rewrite this: It should get a table and return an array with the KEYS of the original table as its VALUES.
 -- E.g. sortedTable({ x = 5, y = 2, a = "test" }) -> { "a", "x", "y" }
-local function sort(a, b) if type(a) == type(b) then return a<b else return tostring(a)<tostring(b) end end
+local function sortCont(a, b) if type(a) == type(b) then return a<b else return tostring(a)<tostring(b) end end
 local function sortedTable(t, to)
 	local tx
 	if to then
@@ -240,7 +251,7 @@ local function sortedTable(t, to)
 	for k,v in pairs(t) do
 		tx[#tx+1] = k
 	end
-	pcall(table.sort, tx, sort) -- <= Real Sorting
+	pcall(sort, tx, sortCont) -- <= Real Sorting
 	return tx
 end
 
@@ -258,6 +269,8 @@ local lastinput = {}
 local commands = {}
 
 -- Storing original callbacks/overriding them to be used
+local realKeyboard, realMouse, fakeKeyboard, fakeMouse
+
 local override, original = {}, {}
 local realKeypressed
 local initOver, callbacks
@@ -280,12 +293,19 @@ function debugger.setOverrides(cb)
 		if active then
 			if key == "backspace" then
 				if texttable[textPosition-1] then
-					table.remove(texttable, textPosition-1)
+					remove(texttable, textPosition-1)
+					textPosition = textPosition - 1
+				end
+				while realKeyboard.isDown("lctrl", "rctrl") and texttable[textPosition-1] and find(texttable[textPosition-1], "%a") do
+					remove(texttable, textPosition-1)
 					textPosition = textPosition - 1
 				end
 			elseif key == "delete" then
 				if texttable[textPosition] then
-					table.remove(texttable, textPosition)
+					remove(texttable, textPosition)
+				end
+				while realKeyboard.isDown("lctrl", "rctrl") and texttable[textPosition] and find(texttable[textPosition], "%a") do
+					remove(texttable, textPosition)
 				end
 			end
 		end
@@ -306,10 +326,9 @@ function debugger.setOverrides(cb)
 
 	override = {
 		textinput = function(text)
-			if text == "\n" then text = "\\n"
-			elseif text == "\r" then text = "\\r" end
+			if text == "\n" or text == "\r" then text = " " end
 			if font:hasGlyphs(text) then
-				table.insert(texttable, textPosition, text)
+				insert(texttable, textPosition, text)
 				textPosition = textPosition + 1
 			end
 		end,
@@ -340,7 +359,7 @@ function debugger.setOverrides(cb)
 end
 
 -- Making sure inputs are not sent to the game while the console is in use.
-local realKeyboard = {
+realKeyboard = {
 	isDown = love.keyboard.isDown,
 	isScancodeDown = love.keyboard.isScancodeDown,
 	setKeyRepeat = love.keyboard.setKeyRepeat,
@@ -348,7 +367,7 @@ local realKeyboard = {
 	setTextInput = love.keyboard.setTextInput,
 	hasTextInput = love.keyboard.hasTextInput
 }
-local realMouse = {
+realMouse = {
 	isDown = love.mouse.isDown,
 	setVisible = love.mouse.setVisible,
 	isVisible = love.mouse.isVisible,
@@ -358,7 +377,7 @@ local mousevisible = false
 local keyrepeat = false
 local hastextinput = false
 local rfalse = function() return false end
-local fakeKeyboard = {
+fakeKeyboard = {
 	isDown = rfalse,
 	isScancodeDown = rfalse,
 	setKeyRepeat = function(rep)
@@ -376,7 +395,7 @@ local fakeKeyboard = {
 		return hastextinput
 	end
 }
-local fakeMouse = {
+fakeMouse = {
 	isDown = rfalse,
 	setVisible = function(visible)
 		if type(visible) == "boolean" then
@@ -443,7 +462,7 @@ local updateEvents = {}
 local updateTime = 0
 -- Update Function
 local fromPattern = "%[\"[_a-zA-Z][_a-zA-Z0-9]-\"%]"
-local nicerPush = function(t) return "."..string.sub(t, 3, #t-2) end
+local nicerPush = function(t) return "."..sub(t, 3, #t-2) end
 function debugger.update(dt)
 	if inputs[debugger.activate] then
 		debugger.setActive()
@@ -452,9 +471,9 @@ function debugger.update(dt)
 	if #lgtime > 0 then
 		local ctime = dep.getTime()
 		if lgtime[1] + debugger.textfade < ctime then
-			table.remove(lgtemp, 1)
-			table.remove(lgtemp, 1)
-			table.remove(lgtime, 1)
+			remove(lgtemp, 1)
+			remove(lgtemp, 1)
+			remove(lgtime, 1)
 		end
 	end
 
@@ -467,7 +486,7 @@ function debugger.update(dt)
 		if inputs.up then
 			if lastselect < #lastinput then
 				if lastselect == 0 and #texttable > 0 then
-					table.insert(lastinput, 1, texttable)
+					insert(lastinput, 1, texttable)
 					lastselect = 2
 				else
 					lastselect = lastselect + 1
@@ -487,7 +506,7 @@ function debugger.update(dt)
 			end
 		end
 
-		if (((inputs.lctrl or inputs.rctrl) and realKeyboard.isDown("v")) or (realKeyboard.isDown("lctrl", "rctrl") and inputs.v)) and love.system then
+		if (((inputs.lctrl or inputs.rctrl) and realKeyboard.isDown("v")) or (realKeyboard.isDown("lctrl", "rctrl") and inputs.v) or inputs.insert) and love.system then
 			local cbt = love.system.getClipboardText()
 			if type(cbt) == "string" then
 				for p,c in utf8.codes(cbt) do
@@ -495,30 +514,30 @@ function debugger.update(dt)
 				end
 			end
 		elseif (((inputs.lctrl or inputs.rctrl) and realKeyboard.isDown("c")) or (realKeyboard.isDown("lctrl", "rctrl") and inputs.c)) and love.system then
-			love.system.setClipboardText(table.concat(texttable, ""))
+			love.system.setClipboardText(concat(texttable, ""))
 		end
 
 		if inputs["return"] and #texttable > 0 then
 			-- Handling console execution.
-			textinput = table.concat(texttable, "")
+			textinput = concat(texttable, "")
 
 			-- Storing current input to be reused
-			table.insert(lastinput, 1, texttable)
+			insert(lastinput, 1, texttable)
 			lastselect = 0
 			if #lastinput > debugger.maxStorage then
-				table.remove(lastinput, #lastinput)
+				remove(lastinput, #lastinput)
 			end
 
 			texttable = {}
 			textPosition = 1
-			if textinput:find("^[/\\!:%.%*]") then
+			if find(textinput, "^[/\\!:%.%*]") then
 				-- A command. Has to be.
 				local args = {}
-				for match in textinput:gmatch("%S+") do
+				for match in gmatch(textinput, "%S+") do
 					args[#args+1] = match
 				end
-				local one = table.remove(args, 1)
-				local command = commands[one:sub(2, #one)]
+				local one = remove(args, 1)
+				local command = commands[sub(one, 2, #one)]
 				if command then
 					local pattern = "^"
 					for i=1, #args do
@@ -535,7 +554,7 @@ function debugger.update(dt)
 
 					local this
 					for k,v in pairs(command) do
-						if v.args:find(pattern) then
+						if find(v.args, pattern) then
 							this = v
 							break
 						end
@@ -543,7 +562,7 @@ function debugger.update(dt)
 
 					if this then
 						local i = 0
-						for c in this.args:gmatch(".") do
+						for c in gmatch(this.args, ".") do
 							i = i + 1
 							if c == "n" then
 								args[i] = tonumber(args[i])
@@ -598,7 +617,7 @@ function debugger.update(dt)
 							end
 						end
 						if #r > 0 then
-							printColor(color.yellow, ":"..table.concat(r, "\t:"))
+							printColor(color.yellow, ":"..concat(r, "\t:"))
 						end
 					end
 				else
@@ -634,8 +653,8 @@ function debugger.update(dt)
 		if not s then dv = nil end
 
 		if (inputs.m1 or inputs.m2) then
-			if love.mouse.getX() >= math.ceil(love.graphics.getWidth()*debugger.printArea) then
-				local nid = math.floor(love.mouse.getY()/fheight-2)
+			if love.mouse.getX() >= ceil(love.graphics.getWidth()*debugger.printArea) then
+				local nid = floor(love.mouse.getY()/fheight-2)
 				local shift = realKeyboard.isDown("lshift", "rshift")
 
 				if nid >= 0 then
@@ -649,7 +668,7 @@ function debugger.update(dt)
 						if display == "_G" then
 							ndisplay = ntext
 						else
-							ndisplay = display.."["..(ntype=="string" and string.format("%q", ntext) or tostring(ntext)).."]"
+							ndisplay = display.."["..(ntype=="string" and format("%q", ntext) or tostring(ntext)).."]"
 						end
 
 						local s, dv = pcall(loadstring("local getmetatable=... return "..ndisplay), getmetatable)
@@ -682,13 +701,13 @@ function debugger.update(dt)
 							end
 						else
 							-- Copying the variable name to the prompt
-							for p,c in utf8.codes(ndisplay:gsub(fromPattern, nicerPush)) do
+							for p,c in utf8.codes(gsub(ndisplay, fromPattern, nicerPush)) do
 								override.textinput(utf8.char(c))
 							end
 						end
 					else
 						-- Copying the variable name to the prompt
-						for p,c in utf8.codes(display:gsub(fromPattern, nicerPush)) do
+						for p,c in utf8.codes(gsub(display, fromPattern, nicerPush)) do
 							override.textinput(utf8.char(c))
 						end
 					end
@@ -707,22 +726,22 @@ function debugger.update(dt)
 						-- Navigating to its parent
 						local s = display
 
-						if s:find("^getmetatable%(.*%)$") then
-							display = string.sub(s, 14, #s-1)
-						elseif s:find("%(%)$") then
-							display = string.sub(s, 1, #s-2)
+						if find(s, "^getmetatable%(.*%)$") then
+							display = sub(s, 14, #s-1)
+						elseif find(s, "%(%)$") then
+							display = sub(s, 1, #s-2)
 						else
-							local e, _e = string.find(s, "%[")
-							if e then s = string.sub(s, e+1, #s) end
+							local e, _e = find(s, "%[")
+							if e then s = sub(s, e+1, #s) end
 							local r = 0
 							while e do
 								r = r + e
-								e, _e = string.find(s, "%[")
-								if e then s = string.sub(s, e+1, #s) end
+								e, _e = find(s, "%[")
+								if e then s = sub(s, e+1, #s) end
 							end
 
 							if r > 0 then
-								display = string.sub(display, 1, r-1)
+								display = sub(display, 1, r-1)
 							else
 								display = "_G"
 							end
@@ -769,7 +788,7 @@ function debugger.addUpdate(func, prio)
 	}
 
 	updateEvents[#updateEvents+1] = this
-	table.sort(updateEvents, function(a, b)
+	sort(updateEvents, function(a, b)
 		return a.prio > b.prio
 	end)
 
@@ -781,7 +800,7 @@ function debugger.addUpdate(func, prio)
 end
 
 local function count(str, patt)
-	local _, c = string.gsub(str, patt, "")
+	local _, c = gsub(str, patt, "")
 	return c
 end
 
@@ -792,7 +811,7 @@ local reppatt = "[\r\n\t\v\\%z\"]"
 local rep = { ["\n"] = "\\n", ["\r"] = "\\r", ["\t"] = "\\t", ["\v"] = "\\v", ["\\"] = "\\\\", ["\0"] = "\\0", ["\""] = "\\\"" }
 -- Printing the Lua prompt
 local function promtPrint(w, h, fheight)
-	local prompt = table.concat(texttable)
+	local prompt = concat(texttable)
 	local width = font:getWidth(prompt)
 	local x = width < w and 0 or w-width
 	lgraphics.print(prompt, x, h-fheight)
@@ -800,7 +819,7 @@ local function promtPrint(w, h, fheight)
 		if textPosition > #texttable then
 			lgraphics.rectangle("fill", font:getWidth(prompt), h-fheight, font:getWidth(" "), fheight)
 		else
-			lgraphics.rectangle("fill", font:getWidth(table.concat(texttable, "", 1, textPosition-1))+x, h-fheight, font:getWidth(table.concat(texttable, "", textPosition, textPosition))-1, fheight)
+			lgraphics.rectangle("fill", font:getWidth(concat(texttable, "", 1, textPosition-1))+x, h-fheight, font:getWidth(concat(texttable, "", textPosition, textPosition))-1, fheight)
 		end
 	end
 end
@@ -813,7 +832,7 @@ function debugger.draw()
 
 	local ram = collectgarbage("count")
 
-	fheight = math.abs(font:getHeight()*font:getLineHeight())
+	fheight = abs(font:getHeight()*font:getLineHeight())
 
 	local oldfont = lgraphics.getFont()
 	lgraphics.setFont(font)
@@ -838,7 +857,7 @@ function debugger.draw()
 
 	if active then
 		-- Prompt and Environment is opened
-		local tt = math.ceil(w*debugger.printArea)
+		local tt = ceil(w*debugger.printArea)
 
 		local _, wrap = font:getWrap(lg, tt)
 		local hlg = #wrap*fheight
@@ -870,11 +889,11 @@ function debugger.draw()
 			indexName = indexName + 1
 		end
 		local function addData(arg)
-			printData[indexData] = arg:sub(1, 150)
+			printData[indexData] = sub(arg, 1, 150)
 			indexData = indexData + 1
 		end
 
-		local maxLines = math.ceil(lgraphics.getHeight()/fheight)
+		local maxLines = ceil(lgraphics.getHeight()/fheight)
 
 		if vartype == "table" or (indexFunctions and vartype == "function") then
 			-- Indexable
@@ -887,7 +906,7 @@ function debugger.draw()
 					local t = type(v)
 					addType(t)
 
-					local name = tostring(k):gsub(reppatt, rep)
+					local name = gsub(tostring(k), reppatt, rep)
 					if pcall(checkUtf8, name) then
 						addName(name)
 					else
@@ -896,9 +915,9 @@ function debugger.draw()
 
 					local data
 					if t == "string" then
-						data = '"'..v:gsub(reppatt, rep)..'"'
+						data = '"'..gsub(v, reppatt, rep)..'"'
 					else
-						data = tostring(v):gsub(reppatt, rep)
+						data = gsub(tostring(v), reppatt, rep)
 					end
 					if pcall(checkUtf8, data) then
 						addData(data)
@@ -913,16 +932,16 @@ function debugger.draw()
 			addType("\t>>>\n")
 			addName("")
 		else
-			addType(tostring(varprint):gsub(" ", " ").."\n\t>>>\n")
+			addType(gsub(tostring(varprint), " ", " ").."\n\t>>>\n")
 		end
 
 		-- Variable Path
-		local path = (display == "_G" and "..." or "> "..display):gsub("getmetatable%(", "Meta("):gsub("%[\"", " > "):gsub("\"%]", ""):gsub(" ", " ")
+		local path = gsub(gsub(gsub(gsub((display == "_G" and "..." or "> "..display), "getmetatable%(", "Meta("), "%[\"", " > "), "\"%]", ""), " ", " ")
 		if font:getWidth("\t"..path) > w-tt then
 			while font:getWidth("\t…"..path) > w-tt do
 				local byteoffset = utf8.offset(path, 2)
 				if byteoffset then
-					path = string.sub(path, byteoffset, #path)
+					path = sub(path, byteoffset, #path)
 				else
 					break
 				end
@@ -930,22 +949,22 @@ function debugger.draw()
 			path = "…"..path
 		end
 
-		local stringType = table.concat(printType, " \n")
-		local stringName = table.concat(printName, " \n")
-		local stringData = table.concat(printData, "\n")
+		local stringType = concat(printType, " \n")
+		local stringName = concat(printName, " \n")
+		local stringData = concat(printData, "\n")
 
 		local header
 		if debugger.useTitleBar then
 			header = "\t"..path.."\n\tType: "..vartype
 		else
-			header = "\t"..path.."\n\tType: "..vartype.." ~"..math.floor(ram+0.5).." KB "..dep.getFPS().." fps"
+			header = "\t"..path.."\n\tType: "..vartype.." ~"..floor(ram+0.5).." KB "..dep.getFPS().." fps"
 		end
 		local hprinted = count(stringType, "\n")*fheight
 
 		-- Printed text and Prompt
 		lgraphics.setColor(color.bgActive)
 		lgraphics.rectangle("fill", 0, 0, tt-1, hlg)
-		lgraphics.rectangle("fill", 0, math.ceil(h-fheight), w, fheight)
+		lgraphics.rectangle("fill", 0, ceil(h-fheight), w, fheight)
 
 		lgraphics.setColor(color.fgActive)
 		if debugger.printArea > 0 then
@@ -958,7 +977,7 @@ function debugger.draw()
 
 		-- Environment Display
 		if debugger.printArea < 1 then
-			lgraphics.setScissor(tt, 0, w-tt, math.ceil(h-fheight-1))
+			lgraphics.setScissor(tt, 0, w-tt, ceil(h-fheight-1))
 
 			lgraphics.setColor(color.bgActive)
 			lgraphics.rectangle("fill", tt, 0, w-tt, hprinted+fheight*2)
@@ -975,7 +994,7 @@ function debugger.draw()
 	elseif debugger.doTempPrint then
 		-- Printing the print calls
 		local updateDif = dep.getTime() - updateTime
-		local tt = math.ceil(w*debugger.printArea)-1
+		local tt = ceil(w*debugger.printArea)-1
 
 		local _, wrap = font:getWrap(lgtemp, tt)
 		local hlg = #wrap*fheight
@@ -993,7 +1012,7 @@ function debugger.draw()
 			lgraphics.printf(lgtemp, 0, 0, tt, "left")
 		end
 		if not debugger.useTitleBar then
-			lgraphics.printf(string.format("%d fps\n~%.1f KB\n%.6f sec.", dep.getFPS(), ram, updateDif), w-tw, 0, tw, "right")
+			lgraphics.printf(format("%d fps\n~%.1f KB\n%.6f sec.", dep.getFPS(), ram, updateDif), w-tw, 0, tw, "right")
 		end
 	elseif not debugger.useTitleBar then
 		-- Not printing the print calls
@@ -1004,11 +1023,11 @@ function debugger.draw()
 		lgraphics.rectangle("fill", w-tw, 0, tw, 3*fheight)
 
 		lgraphics.setColor(color.fgNotActive)
-		lgraphics.printf(string.format("%d fps\n~%.1f KB\n%.6f sec.", dep.getFPS(), ram, updateDif), w-tw, 0, tw, "right")
+		lgraphics.printf(format("%d fps\n~%.1f KB\n%.6f sec.", dep.getFPS(), ram, updateDif), w-tw, 0, tw, "right")
 	end
 
 	if debugger.useTitleBar then
-		dep.setTitle(("%s [%d FPS] [%.1f KB] [%.6f s.]"):format(dep.getRegularTitle(), dep.getFPS(), ram, dep.getTime()-updateTime))
+		dep.setTitle(format("%s [%d FPS] [%.1f KB] [%.6f s.]", dep.getRegularTitle(), dep.getFPS(), ram, dep.getTime()-updateTime))
 	elseif dep.titleUpdated then
 		dep.setTitle(dep.getRegularTitle())
 		dep.titleUpdated = false
@@ -1039,8 +1058,8 @@ do
 	function notInDebugger()
 		local tb = traceback("", 3)
 
-		if tb:find(codepath, 1, true) then return false end
-		if tb:find(allowed , 1, true) then return false end
+		if find(tb, codepath, 1, true) then return false end
+		if find(tb, allowed , 1, true) then return false end
 		return true
 	end
 end
@@ -1097,7 +1116,7 @@ function debugger.allowFunctionIndex(desc)
 			elseif k == "___code" then
 				if jitfuncinfo then
 					local info = jitfuncinfo(f)
-					local source = (info.source or ""):gsub("^@", "")
+					local source = gsub((info.source or ""), "^@", "")
 					if isFile(source) then
 						local i = 0
 						local codelines = {}
@@ -1112,7 +1131,7 @@ function debugger.allowFunctionIndex(desc)
 							end
 						end
 
-						return table.concat(codelines, "\n")
+						return concat(codelines, "\n")
 					else
 						error("unable to find code file")
 					end
@@ -1177,7 +1196,7 @@ function debugger.allowFunctionIndex(desc)
 				local v
 
 				local info = jitfuncinfo(f)
-				local source = (info.source or ""):gsub("^@", "")
+				local source = gsub((info.source or ""), "^@", "")
 				local linedefined = info.linedefined
 				if isFile(source) and linedefined then
 					local i = 0
@@ -1270,6 +1289,50 @@ function debugger.monitorGlobal(writeTo)
 	})
 end
 
+function debugger.viewLocals(src, inLine, var, key)
+	if src == nil then
+		debug.sethook()
+		printColor(color.blue, "Disabled local viewer.")
+	else
+		local getinfo = debug.getinfo
+		local getlocal = debug.getlocal
+		local sethook = debug.sethook
+
+		local storage, storeKey
+		if key == nil then
+			storage = _G
+			storeKey = var or "_local"
+		else
+			storage = var
+			storeKey = key or "_local"
+		end
+
+		if type(src) == "function" then
+			src = getinfo(src).short_src
+		end
+		if type(inLine) ~= "number" then
+			printColor(color.red, "You need to pass the line to check in!")
+			return
+		end
+
+		printColor(color.blue, "Enabled local viewer.\nAny future passes on that line will now write a table!")
+
+		sethook(function(event, line)
+			if line == inLine and src == getinfo(2).short_src then
+				local locals = {}
+				local i = 1
+				local n, v = getlocal(2, i)
+				while n or v do
+					locals[n] = v
+					i = i + 1
+					n, v = getlocal(2, i)
+				end
+				storage[storeKey] = locals
+			end
+		end, "l")
+	end
+end
+
 function debugger.newCommand(name, args, func)
 	assert(type(name) == "string", "Command Name has to be a string!")
 	assert(type(args) == "string", "Argument Pattern has to be a string!")
@@ -1289,6 +1352,8 @@ debugger.newCommand("index", "b", debugger.allowFunctionIndex)
 
 debugger.newCommand("global", "" , debugger.monitorGlobal)
 debugger.newCommand("global", "s", debugger.monitorGlobal)
+
+debugger.newCommand("local", "sn", debugger.viewLocals)
 -- Screen Clearing
 debugger.newCommand("clear", "", debugger.clear)
 -- Quick navigation
@@ -1298,21 +1363,21 @@ debugger.newCommand("to", "", function()
 	return ":Moved to "..display.."."
 end)
 debugger.newCommand("to", "s", function(s)
-	display = s:gsub("%.([^%[%]\"'%(%)%{%}%.]*)",
+	display = gsub(s, "%.([^%[%]\"'%(%)%{%}%.]*)",
 	function(t) return "[\""..t.."\"]" end)
 	yScroll = 1
 	return ":Moved to "..display.."."
 end)
-debugger.newCommand("loc", "", function() return ":Currently at "..display:gsub(fromPattern, nicerPush) end)
+debugger.newCommand("loc", "", function() return ":Currently at "..gsub(display, fromPattern, nicerPush) end)
 
 debugger.newCommand("help", "", function()
 	local all = {}
 	for k,v in pairs(commands) do
 		all[#all+1] = "\t"..k
 	end
-	table.sort(all)
-	table.insert(all, 1, "All available commands:")
-	return table.concat(all, "\n")
+	sort(all)
+	insert(all, 1, "All available commands:")
+	return concat(all, "\n")
 end)
 debugger.newCommand("help", "s", function(s)
 	local cmd = commands[s]
@@ -1324,12 +1389,16 @@ debugger.newCommand("help", "s", function(s)
 			b = "<boolean>"
 		}
 		for i,v in ipairs(cmd) do
-			local x = v.args:gsub("", ", ")
-			all[#all+1] = "\t"..x:sub(2, #x-2):gsub(".", replace)
+			if v.args == "" then
+				all[#all+1] = "\t[none]"
+			else
+				local x = gsub(v.args, "", " ")
+				all[#all+1] = "\t"..gsub(sub(x, 2, #x-1), ".", replace)
+			end
 		end
-		table.sort(all)
-		table.insert(all, 1, "Usage: /"..s)
-		return table.concat(all, "\n")
+		sort(all)
+		insert(all, 1, "Usage: /"..s)
+		return concat(all, "\n")
 	elseif s == "me" then
 		return ":You might need professional help if you ask a debugging tool..."
 	else
