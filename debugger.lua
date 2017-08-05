@@ -1,5 +1,5 @@
 --[[
-Copyright © 2017 "DPlayer234"/"DPlay"
+Copyright © 2017 Darius "DPlay" K.
 This work is free. You can redistribute it and/or modify it under the
 terms of the Do What The Fuck You Want To Public License, Version 2,
 as published by Sam Hocevar. See the COPYING file for more details.
@@ -14,6 +14,7 @@ debugger.printArea   = 2/3  -- Screen Area where the prints are displayed (ratio
 debugger.doTempPrint = true -- Whether or not to print to the screen if the console is closed.
 debugger.maxStorage  = 100  -- How many console inputs are stored to be reused (by using 'Up' and 'Down' arrow keys). (Default: 100)
 debugger.useTitleBar = true -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar. (Default: true)
+debugger.replaceTabs ="    "-- Replace tab character in prints with the specified string.
 
 debugger.color = {          -- Various colors used
 	-- Active:
@@ -53,6 +54,7 @@ local table, string, math = table, string, math
 local insert, remove, concat, sort = table.insert, table.remove, table.concat, table.sort
 local floor, ceil, abs = math.floor, math.ceil, math.abs
 local sub, gsub, gmatch, format, find = string.sub, string.gsub, string.gmatch, string.format, string.find
+local utf8_len, utf8_codes, utf8_char, utf8_offset = utf8.len, utf8.codes, utf8.char, utf8.offset
 
 local type = type
 local pcall = pcall
@@ -112,7 +114,7 @@ end
 -- Setting the font
 local font, fheight
 function debugger.setFont(nfont)
-	if nfont:type() == "Font" then
+	if nfont.type and nfont:type() == "Font" then
 		font = nfont
 		fheight = font:getHeight()*font:getLineHeight()
 	else
@@ -123,7 +125,11 @@ function debugger.getFont()
 	return font
 end
 
-debugger.setFont(love.graphics.getFont())
+do
+	debugger.setFont(love.graphics.getFont())
+	local s, lFont = pcall(require, "debugger_font")
+	if s then debugger.setFont(lFont) end
+end
 
 -- Print Calls / Wrapping the 'regular' print
 local realPrint = print
@@ -133,7 +139,7 @@ local lgtemp = {}
 local lgtime = {}
 local color = debugger.color
 
-local function checkUtf8(s) for p,c in utf8.codes(s) do end end
+local function checkUtf8(s) return utf8_len(s) and true end
 local function getLines(sf)
 	local nl = 0
 	for i,v in ipairs(sf) do
@@ -151,10 +157,11 @@ local function proxyPrint(c, ...)
 	local top = 0
 	for i,v in pairs(args) do
 		args[i] = gsub(tostring(v), "[%z\r]", "")
-		local s, e = pcall(checkUtf8, args[i])
-		if not s then
+		local valid = checkUtf8(args[i])
+		if not valid then
 			args[i] = ":ERROR: (utf8)"
-			c = color.red
+		elseif debugger.replaceTabs then
+			args[i] = gsub(args[i], "\t", debugger.replaceTabs)
 		end
 		if i > top then top = i end
 	end
@@ -167,7 +174,7 @@ local function proxyPrint(c, ...)
 	if #args < 1 then args[1] = "nil" end
 	args[#args+1] = "\n"
 
-	local t = concat(args, "\t")
+	local t = concat(args, debugger.replaceTabs or "\t")
 
 	if t ~= lastPrint then
 		local time = dep.getTime()
@@ -509,8 +516,8 @@ function debugger.update(dt)
 		if (((inputs.lctrl or inputs.rctrl) and realKeyboard.isDown("v")) or (realKeyboard.isDown("lctrl", "rctrl") and inputs.v) or inputs.insert) and love.system then
 			local cbt = love.system.getClipboardText()
 			if type(cbt) == "string" then
-				for p,c in utf8.codes(cbt) do
-					override.textinput(utf8.char(c))
+				for p,c in utf8_codes(cbt) do
+					override.textinput(utf8_char(c))
 				end
 			end
 		elseif (((inputs.lctrl or inputs.rctrl) and realKeyboard.isDown("c")) or (realKeyboard.isDown("lctrl", "rctrl") and inputs.c)) and love.system then
@@ -533,9 +540,22 @@ function debugger.update(dt)
 			if find(textinput, "^[/\\!:%.%*]") then
 				-- A command. Has to be.
 				local args = {}
+				local inString, string = false, nil
 				for match in gmatch(textinput, "%S+") do
-					args[#args+1] = match
+					if inString then
+						if match:find("\"$") then
+							args[#args+1] = string .. " " .. match:sub(1, #match-1)
+							inString, string = false, nil
+						else
+							string = string .. " " .. match
+						end
+					elseif match:find("^\".*[^\"]$") then
+						inString, string = true, match:sub(2, #match)
+					else
+						args[#args+1] = match
+					end
 				end
+
 				local one = remove(args, 1)
 				local command = commands[sub(one, 2, #one)]
 				if command then
@@ -553,8 +573,13 @@ function debugger.update(dt)
 					pattern = pattern.."$"
 
 					local this
-					for k,v in pairs(command) do
-						if find(v.args, pattern) then
+					for i,v in ipairs(command) do
+						if pattern == "" then
+							if v.args == "" then
+								this = v
+								break
+							end
+						elseif find(v.args, pattern) then
 							this = v
 							break
 						end
@@ -701,14 +726,14 @@ function debugger.update(dt)
 							end
 						else
 							-- Copying the variable name to the prompt
-							for p,c in utf8.codes(gsub(ndisplay, fromPattern, nicerPush)) do
-								override.textinput(utf8.char(c))
+							for p,c in utf8_codes(gsub(ndisplay, fromPattern, nicerPush)) do
+								override.textinput(utf8_char(c))
 							end
 						end
 					else
 						-- Copying the variable name to the prompt
-						for p,c in utf8.codes(gsub(display, fromPattern, nicerPush)) do
-							override.textinput(utf8.char(c))
+						for p,c in utf8_codes(gsub(display, fromPattern, nicerPush)) do
+							override.textinput(utf8_char(c))
 						end
 					end
 				else
@@ -806,6 +831,8 @@ end
 
 -- Draw Function(s)
 local lgraphics = love.graphics
+-- If there only was something like an import statement...
+local graphics_print, graphics_printf, graphics_rectangle, graphics_push, graphics_origin, graphics_setFont, graphics_getFont, graphics_setScissor, graphics_getScissor, graphics_setShader, graphics_getShader, graphics_setBlendMode, graphics_getBlendMode, graphics_setColorMask, graphics_getColorMask, graphics_setWireframe, graphics_isWireframe, graphics_setColor, graphics_getColor, graphics_getDimensions, graphics_pop = lgraphics.print, lgraphics.printf, lgraphics.rectangle, lgraphics.push, lgraphics.origin, lgraphics.setFont, lgraphics.getFont, lgraphics.setScissor, lgraphics.getScissor, lgraphics.setShader, lgraphics.getShader, lgraphics.setBlendMode, lgraphics.getBlendMode, lgraphics.setColorMask, lgraphics.getColorMask, lgraphics.setWireframe, lgraphics.isWireframe, lgraphics.setColor, lgraphics.getColor, lgraphics.getDimensions, lgraphics.pop
 
 local reppatt = "[\r\n\t\v\\%z\"]"
 local rep = { ["\n"] = "\\n", ["\r"] = "\\r", ["\t"] = "\\t", ["\v"] = "\\v", ["\\"] = "\\\\", ["\0"] = "\\0", ["\""] = "\\\"" }
@@ -814,46 +841,61 @@ local function promtPrint(w, h, fheight)
 	local prompt = concat(texttable)
 	local width = font:getWidth(prompt)
 	local x = width < w and 0 or w-width
-	lgraphics.print(prompt, x, h-fheight)
+	graphics_print(prompt, x, h-fheight)
 	if dep.getTime()%0.5 >= 0.25 then
 		if textPosition > #texttable then
-			lgraphics.rectangle("fill", font:getWidth(prompt), h-fheight, font:getWidth(" "), fheight)
+			graphics_rectangle("fill", font:getWidth(prompt), h-fheight, font:getWidth(" "), fheight)
 		else
-			lgraphics.rectangle("fill", font:getWidth(concat(texttable, "", 1, textPosition-1))+x, h-fheight, font:getWidth(concat(texttable, "", textPosition, textPosition))-1, fheight)
+			graphics_rectangle("fill", font:getWidth(concat(texttable, "", 1, textPosition-1))+x, h-fheight, font:getWidth(concat(texttable, "", textPosition, textPosition))-1, fheight)
 		end
 	end
 end
 
+local getAdditionalInfo = function() end
+
+local infoTitleFormat = "%s [%d FPS] [%.1f KB] [%.6f s.]"
+local function infoTitle(title, fps, ram, time)
+	local s, r = pcall(format, infoTitleFormat, title, fps, ram, time, getAdditionalInfo())
+	return r
+end
+
+local infoBoxFormat = "%d FPS\n~%.1f KB\n%.6f s."
+local function infoBox(fps, ram, time)
+	local s, r = pcall(format, infoBoxFormat, fps, ram, time, getAdditionalInfo())
+	return r
+end
+
+local __infoTitleFormat, __infoBoxFormat = infoTitleFormat, infoBoxFormat
 -- Drawing everything
 function debugger.draw()
 	-- Storing the current graphics state and resetting it
-	lgraphics.push()
-	lgraphics.origin()
+	graphics_push()
+	graphics_origin()
 
 	local ram = collectgarbage("count")
 
 	fheight = abs(font:getHeight()*font:getLineHeight())
 
-	local oldfont = lgraphics.getFont()
-	lgraphics.setFont(font)
+	local oldfont = graphics_getFont()
+	graphics_setFont(font)
 
-	local xs, ys, ws, hs = lgraphics.getScissor()
-	lgraphics.setScissor()
+	local xs, ys, ws, hs = graphics_getScissor()
+	graphics_setScissor()
 
-	local oldshader = lgraphics.getShader()
-	lgraphics.setShader()
+	local oldshader = graphics_getShader()
+	graphics_setShader()
 
-	local blendmode, alphablendmode = lgraphics.getBlendMode()
-	lgraphics.setBlendMode("alpha")
+	local blendmode, alphablendmode = graphics_getBlendMode()
+	graphics_setBlendMode("alpha")
 
-	local rm, gm, bm, am = lgraphics.getColorMask()
-	lgraphics.setColorMask(true, true, true, true)
+	local rm, gm, bm, am = graphics_getColorMask()
+	graphics_setColorMask(true, true, true, true)
 
-	local wireframe = lgraphics.isWireframe()
-	lgraphics.setWireframe(false)
+	local wireframe = graphics_isWireframe()
+	graphics_setWireframe(false)
 
-	local r, g, b, a = lgraphics.getColor()
-	local w, h = lgraphics.getDimensions()
+	local r, g, b, a = graphics_getColor()
+	local w, h = graphics_getDimensions()
 
 	if active then
 		-- Prompt and Environment is opened
@@ -893,7 +935,7 @@ function debugger.draw()
 			indexData = indexData + 1
 		end
 
-		local maxLines = ceil(lgraphics.getHeight()/fheight)
+		local maxLines = ceil(h/fheight)
 
 		if vartype == "table" or (indexFunctions and vartype == "function") then
 			-- Indexable
@@ -907,7 +949,7 @@ function debugger.draw()
 					addType(t)
 
 					local name = gsub(tostring(k), reppatt, rep)
-					if pcall(checkUtf8, name) then
+					if checkUtf8(name) then
 						addName(name)
 					else
 						addName(":ERROR: (utf8)")
@@ -919,7 +961,7 @@ function debugger.draw()
 					else
 						data = gsub(tostring(v), reppatt, rep)
 					end
-					if pcall(checkUtf8, data) then
+					if checkUtf8(data) then
 						addData(data)
 					else
 						addData(":ERROR: (utf8)")
@@ -939,7 +981,7 @@ function debugger.draw()
 		local path = gsub(gsub(gsub(gsub((display == "_G" and "..." or "> "..display), "getmetatable%(", "Meta("), "%[\"", " > "), "\"%]", ""), " ", " ")
 		if font:getWidth("\t"..path) > w-tt then
 			while font:getWidth("\t…"..path) > w-tt do
-				local byteoffset = utf8.offset(path, 2)
+				local byteoffset = utf8_offset(path, 2)
 				if byteoffset then
 					path = sub(path, byteoffset, #path)
 				else
@@ -957,39 +999,39 @@ function debugger.draw()
 		if debugger.useTitleBar then
 			header = "\t"..path.."\n\tType: "..vartype
 		else
-			header = "\t"..path.."\n\tType: "..vartype.." ~"..floor(ram+0.5).." KB "..dep.getFPS().." fps"
+			header = "\t"..path.."\n\tType: "..vartype.." ~"..floor(ram+0.5).." KB "..dep.getFPS().." FPS"
 		end
 		local hprinted = count(stringType, "\n")*fheight
 
 		-- Printed text and Prompt
-		lgraphics.setColor(color.bgActive)
-		lgraphics.rectangle("fill", 0, 0, tt-1, hlg)
-		lgraphics.rectangle("fill", 0, ceil(h-fheight), w, fheight)
+		graphics_setColor(color.bgActive)
+		graphics_rectangle("fill", 0, 0, tt-1, hlg)
+		graphics_rectangle("fill", 0, ceil(h-fheight), w, fheight)
 
-		lgraphics.setColor(color.fgActive)
+		graphics_setColor(color.fgActive)
 		if debugger.printArea > 0 then
-			lgraphics.setScissor(0, 0, tt-1, hlg)
-			lgraphics.printf(lg, 0, 0, tt, "left")
-			lgraphics.setScissor()
+			graphics_setScissor(0, 0, tt-1, hlg)
+			graphics_printf(lg, 0, 0, tt, "left")
+			graphics_setScissor()
 		end
 
 		pcall(promtPrint, w, h, fheight)
 
 		-- Environment Display
 		if debugger.printArea < 1 then
-			lgraphics.setScissor(tt, 0, w-tt, ceil(h-fheight-1))
+			graphics_setScissor(tt, 0, w-tt, ceil(h-fheight-1))
 
-			lgraphics.setColor(color.bgActive)
-			lgraphics.rectangle("fill", tt, 0, w-tt, hprinted+fheight*2)
+			graphics_setColor(color.bgActive)
+			graphics_rectangle("fill", tt, 0, w-tt, hprinted+fheight*2)
 
-			lgraphics.setColor(color.fgActive)
+			graphics_setColor(color.fgActive)
 			local wt = font:getWrap(stringType, (w-tt)/2)
 			local wt2 = font:getWrap(stringName, (w-tt)/2-wt)
-			lgraphics.print(stringType, tt, fheight*2)
-			lgraphics.print(stringData, tt+wt+wt2, fheight*2)
-			lgraphics.setColor(color.fgActive2)
-			lgraphics.printf(header, tt, 0, w-tt, "justify")
-			lgraphics.print(stringName, tt+wt, fheight*2)
+			graphics_print(stringType, tt, fheight*2)
+			graphics_print(stringData, tt+wt+wt2, fheight*2)
+			graphics_setColor(color.fgActive2)
+			graphics_printf(header, tt, 0, w-tt, "justify")
+			graphics_print(stringName, tt+wt, fheight*2)
 		end
 	elseif debugger.doTempPrint then
 		-- Printing the print calls
@@ -998,50 +1040,52 @@ function debugger.draw()
 
 		local _, wrap = font:getWrap(lgtemp, tt)
 		local hlg = #wrap*fheight
-		local tw
+		local tw, wrap, infoText
 
-		lgraphics.setColor(color.bgNotActive)
-		lgraphics.rectangle("fill", 0, 0, tt, hlg)
+		graphics_setColor(color.bgNotActive)
+		graphics_rectangle("fill", 0, 0, tt, hlg)
 		if not debugger.useTitleBar then
-			tw = font:getWidth("~0000000 KB\n0.000000 sec.")
-			lgraphics.rectangle("fill", w-tw, 0, tw, 3*fheight)
+			infoText = infoBox(dep.getFPS(), ram, updateDif)
+			tw, wrap = font:getWrap(infoText, w)
+			graphics_rectangle("fill", w-tw, 0, tw, #wrap*fheight)
 		end
 
-		lgraphics.setColor(color.fgNotActive)
+		graphics_setColor(color.fgNotActive)
 		if debugger.printArea > 0 then
-			lgraphics.printf(lgtemp, 0, 0, tt, "left")
+			graphics_printf(lgtemp, 0, 0, tt, "left")
 		end
 		if not debugger.useTitleBar then
-			lgraphics.printf(format("%d fps\n~%.1f KB\n%.6f sec.", dep.getFPS(), ram, updateDif), w-tw, 0, tw, "right")
+			graphics_printf(infoText, w-tw, 0, tw, "right")
 		end
 	elseif not debugger.useTitleBar then
 		-- Not printing the print calls
 		local updateDif = dep.getTime() - updateTime
-		local tw = font:getWidth("~0000000 KB\n0.000000 sec.")
+		local infoText = infoBox(dep.getFPS(), ram, updateDif)
+		local tw, wrap = font:getWrap(infoText, w)
 
-		lgraphics.setColor(color.bgNotActive)
-		lgraphics.rectangle("fill", w-tw, 0, tw, 3*fheight)
+		graphics_setColor(color.bgNotActive)
+		graphics_rectangle("fill", w-tw, 0, tw, #wrap*fheight)
 
-		lgraphics.setColor(color.fgNotActive)
-		lgraphics.printf(format("%d fps\n~%.1f KB\n%.6f sec.", dep.getFPS(), ram, updateDif), w-tw, 0, tw, "right")
+		graphics_setColor(color.fgNotActive)
+		graphics_printf(infoText, w-tw, 0, tw, "right")
 	end
 
 	if debugger.useTitleBar then
-		dep.setTitle(format("%s [%d FPS] [%.1f KB] [%.6f s.]", dep.getRegularTitle(), dep.getFPS(), ram, dep.getTime()-updateTime))
+		dep.setTitle(infoTitle(dep.getRegularTitle(), dep.getFPS(), ram, dep.getTime()-updateTime))
 	elseif dep.titleUpdated then
 		dep.setTitle(dep.getRegularTitle())
 		dep.titleUpdated = false
 	end
 
 	-- Returning the graphics state
-	lgraphics.pop()
-	lgraphics.setFont(oldfont)
-	lgraphics.setScissor(xs, ys, ws, hs)
-	lgraphics.setColor(r, g, b, a)
-	lgraphics.setShader(oldshader)
-	lgraphics.setBlendMode(blendmode, alphablendmode)
-	lgraphics.getColorMask(rm, gm, bm, am)
-	lgraphics.setWireframe(wireframe)
+	graphics_pop()
+	graphics_setFont(oldfont)
+	graphics_setScissor(xs, ys, ws, hs)
+	graphics_setColor(r, g, b, a)
+	graphics_setShader(oldshader)
+	graphics_setBlendMode(blendmode, alphablendmode)
+	graphics_getColorMask(rm, gm, bm, am)
+	graphics_setWireframe(wireframe)
 end
 
 function debugger.isActive()
@@ -1333,17 +1377,61 @@ function debugger.viewLocals(src, inLine, var, key)
 	end
 end
 
+function debugger.varDisplay(...)
+	infoTitleFormat, infoBoxFormat = __infoTitleFormat, __infoBoxFormat
+	if ... then
+		local varList = ""
+		local varFunc = {}
+		local args = {...}
+		for i,v in ipairs(args) do
+			infoTitleFormat = infoTitleFormat .. " [" .. v[1] .. "]"
+			infoBoxFormat = infoBoxFormat .. "\n" .. v[1]
+			varList = varList .. "v" .. tostring(i) .. (i < #args and "," or "")
+			varFunc[i] = v[2]
+		end
+
+		local code = [[
+			local pcall,]] .. varList .. [[ = ...
+			local function vars()
+				return ]] .. varList:gsub(",", "(),") .. [[()
+			end
+			return function()
+				local s,]] .. varList .. [[ = pcall(vars)
+				return ]] .. varList .. [[
+			end
+		]]
+		getAdditionalInfo = loadstring(code)(pcall, unpack(varFunc))
+		printColor(color.yellow, ":Set custom Var. Display.")
+	else
+		getAdditionalInfo = function() end
+		printColor(color.yellow, ":Reset Var. Display.")
+	end
+end
+
 function debugger.newCommand(name, args, func)
 	assert(type(name) == "string", "Command Name has to be a string!")
 	assert(type(args) == "string", "Argument Pattern has to be a string!")
 	assert(type(func) == "function" or getmetatable(func) and rawget(getmetatable(func), "__call"), "Argument function needs to be callable!")
 
-	if commands[name] == nil then commands[name] = {} end
+	if commands[name] == nil then
+		commands[name] = { name = name, alias = {} }
+	elseif commands[name].name ~= name then
+		error(":Cannot add alternative syntax to alias '"..tostring(name).."' of command '"..tostring(commands[name].name).."'.")
+	end
 	local c = {
 		args = args,
 		func = func
 	}
 	commands[name][#commands[name]+1] = c
+end
+
+function debugger.aliasCommand(name, as)
+	if commands[as] == nil then
+		commands[as] = commands[name]
+		commands[name].alias[#commands[name].alias+1] = as
+	else
+		error(":Command '"..tostring(name).."' exists already.")
+	end
 end
 
 -- Adding some default commands!
@@ -1354,6 +1442,7 @@ debugger.newCommand("global", "" , debugger.monitorGlobal)
 debugger.newCommand("global", "s", debugger.monitorGlobal)
 
 debugger.newCommand("local", "sn", debugger.viewLocals)
+debugger.newCommand("local", "", debugger.viewLocals)
 -- Screen Clearing
 debugger.newCommand("clear", "", debugger.clear)
 -- Quick navigation
@@ -1373,7 +1462,9 @@ debugger.newCommand("loc", "", function() return ":Currently at "..gsub(display,
 debugger.newCommand("help", "", function()
 	local all = {}
 	for k,v in pairs(commands) do
-		all[#all+1] = "\t"..k
+		if k == v.name then
+			all[#all+1] = "\t"..k
+		end
 	end
 	sort(all)
 	insert(all, 1, "All available commands:")
@@ -1382,6 +1473,7 @@ end)
 debugger.newCommand("help", "s", function(s)
 	local cmd = commands[s]
 	if cmd then
+		local name = cmd.name
 		local all = {}
 		local replace = {
 			s = "<string>",
@@ -1390,14 +1482,20 @@ debugger.newCommand("help", "s", function(s)
 		}
 		for i,v in ipairs(cmd) do
 			if v.args == "" then
-				all[#all+1] = "\t[none]"
+				all[#all+1] = "\t/"..name
 			else
 				local x = gsub(v.args, "", " ")
-				all[#all+1] = "\t"..gsub(sub(x, 2, #x-1), ".", replace)
+				all[#all+1] = "\t/"..name.." "..gsub(sub(x, 2, #x-1), ".", replace)
 			end
 		end
 		sort(all)
-		insert(all, 1, "Usage: /"..s)
+		insert(all, 1, "[[ Help for '"..name.."' ]]\nSyntax:")
+		if #cmd.alias > 0 then
+			insert(all, "Aliases:")
+			for i=1, #cmd.alias do
+				insert(all, "\t/"..cmd.alias[i].." ...")
+			end
+		end
 		return concat(all, "\n")
 	elseif s == "me" then
 		return ":You might need professional help if you ask a debugging tool..."

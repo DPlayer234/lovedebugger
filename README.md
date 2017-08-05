@@ -53,7 +53,7 @@ At the bottom is said Lua prompt, at the right is said global environment. Use t
 Additionally, it supports commands. Commands can be accessed by prefixing a command's name with '/', '\\', '!', ':', '.', or '\*' and listing all arguments separated with spaces. By default, it comes with the following ones:
 
 ```
-/command [optional]
+/command <required> [optional]
 	Information
 
 /index [nicer_name]
@@ -66,6 +66,9 @@ Additionally, it supports commands. Commands can be accessed by prefixing a comm
 	Moves to the defined location in the environment. No arguments means back to the root.
 /loc
 	Displays the current location in the environment.
+/local <source> <inLine>
+/local
+	See debugger.viewLocals(source, inLine) further down.
 /help [command]
 	Either lists all commands, or if the name of one is passed, shows all valid argument patterns.
 ```
@@ -136,11 +139,17 @@ debugger.realPrint(...)
 -- Regular Lua print function
 debugger.clear()
 -- Clears the console
+debugger.tempClear()
+-- Only clear the temporary console
 
 debugger.setActive(active)
 -- Sets whether or not the Lua prompt is active
 debugger.isActive()
 -- Returns whether the Lua prompt is active
+
+debugger.addUpdate(func, priority)
+-- Adds a function to be called every frame. The function is passed dt (if dt is passed
+-- to debugger.update).
 
 debugger.allowFunctionIndex(nicer_name)
 -- Enables function indexing, allowing you to browse the upvalues
@@ -155,9 +164,27 @@ debugger.monitorGlobal(writeTo)
 -- 'writeto' is the file path (within the Löve save directory) to write the output to.
 -- Defaults to '_G (log).txt'.
 
-debugger.addUpdate(func, priority)
--- Adds a function to be called every frame. The function is passed dt (if dt is passed
--- to debugger.update).
+debugger.viewLocals(source, inLine, var, key)
+-- Used debug.sethook to write the locals given to a table.
+-- 'source' has to be either a relative file-name or a function in the same file.
+-- 'inLine' is the line number, at which to pick out the variables from.
+-- 'var' and 'key' are optional: If neither is defined, it will write the table to the global
+-- variable _local. If only 'var' is defined, it will write it to a global variable of
+-- the same name. If both are defined, 'var' is expected to be a table and 'key' is the key in that
+-- table it will write to.
+-- Calling it without any arguments will reset it. Calling it while running will override the
+-- existing routine.
+
+debugger.varDisplay(...)
+-- Will display all given variables dynamically where FPS, Lua RAM etc. are displayed.
+-- This call is not additive and will override any previous calls!
+-- Takes any amount of arguments, formatted as such:
+-- { "string to format given the result %s", function() return "or whatever" end }
+
+debugger.aliasCommand(name, alias)
+-- Allows you to access the command of 'name' also as 'alias'. You cannot add variants to
+-- existing commands via the alias's title, create an alias with the name of another alias
+-- or command or create a new command with the name of an alias.
 ```
 
 There's also a few constants that you may modify as well:
@@ -188,6 +215,10 @@ debugger.useTitleBar = true
 -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar.
 -- If false, will always display it in the upper-right corner of the window instead.
 
+debugger.replaceTabs = "    "
+-- Replace tab character in prints with the specified characters.
+-- Set to false to disable.
+
 debugger.color = {...}
 -- A list of several colors used by the debugger, most notably:
 -- fgActive, fgActive2, bgActive,
@@ -202,10 +233,11 @@ debugger.color = {...}
 * It always uses 'debug.getmetatable' rather than 'getmetatable'. Therefore it can access metatables even if those have a '\_\_metatable' key.
 * The variable 'getmetatable' is overriden by 'debug.getmetatable' within the Lua prompt.
 * This tool monkey-patches Lua's 'print' (but not 'io.write') function. The original function is stored as 'debugger.realPrint'.
+* It will attempt to require "debugger_font", which it expects to return a Font to use, on load. If it finds such a file, and it does not return a Font, it may crash.
 
 ---
 
-Copyright © 2017 "DPlayer234"/"DPlay"<br>
+Copyright © 2017 Darius "DPlay" K.<br>
 This work is free. You can redistribute it and/or modify it under the<br>
 terms of the Do What The Fuck You Want To Public License, Version 2,<br>
 as published by Sam Hocevar. See the COPYING file for more details.
