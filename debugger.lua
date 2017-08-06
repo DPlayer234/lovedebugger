@@ -1352,7 +1352,7 @@ function debugger.viewLocals(src, inLine, var, key)
 		end
 
 		if type(src) == "function" then
-			src = getinfo(src).short_src
+			src = getinfo(src, "S").short_src
 		end
 		if type(inLine) ~= "number" then
 			printColor(color.red, "You need to pass the line to check in!")
@@ -1362,7 +1362,7 @@ function debugger.viewLocals(src, inLine, var, key)
 		printColor(color.blue, "Enabled local viewer.\nAny future passes on that line will now write a table!")
 
 		sethook(function(event, line)
-			if line == inLine and src == getinfo(2).short_src then
+			if line == inLine and src == getinfo(2, "S").short_src then
 				local locals = {}
 				local i = 1
 				local n, v = getlocal(2, i)
@@ -1375,6 +1375,38 @@ function debugger.viewLocals(src, inLine, var, key)
 			end
 		end, "l")
 	end
+end
+
+function debugger.getStack(stack)
+	stack = (stack or 1) + 1
+	local getinfo = debug.getinfo
+	local getlocal = debug.getlocal
+
+	local var = {}
+
+	local i=0
+	local stackInfo = getinfo(stack, "fn")
+	while stackInfo do
+		local this = {
+			["(Function:)"] = stackInfo.func,
+			["(Function Name:)"] = stackInfo.name
+		}
+		i = i + 1
+		var[i] = this
+
+		local l = 1
+    while true do
+      local name, value = getlocal(stack, l)
+      if not name then break end
+      this[name] = value
+      l = l + 1
+    end
+
+		stack = stack + 1
+		stackInfo = getinfo(stack, "fn")
+	end
+
+	return var
 end
 
 function debugger.varDisplay(...)
@@ -1564,5 +1596,56 @@ setmetatable(debugger, {
 		return self
 	end
 })
+
+-- If you want to use this as an error-handler
+-- Will probably fail if the error was a stack overflow.
+function debugger.errhand(message, stack)
+	message = message or ""
+	stack = stack or 2
+
+	local love = require "love"
+	local timer = require "love.timer"
+	local event = require "love.event"
+	local graphics = require "love.graphics"
+
+	_stackTraceback = debug.traceback(message, stack)
+	printColor(color.red, _stackTraceback)
+
+	_stackLocals = debugger.getStack(stack)
+	if not indexFunctions then
+		debugger.allowFunctionIndex(true)
+	end
+
+	local main, callback = {}, {}
+	local bg = {0, 85, 170}
+	debugger(main, callback)
+
+	debugger.setActive(false) debugger.setActive(true)
+
+	local dt = 0
+	timer.step()
+
+	while true do
+		event.pump()
+		for name, a,b,c,d,e,f in event.poll() do
+			if name == "quit" then
+				return a
+			elseif callback[name] then
+				callback[name](a,b,c,d,e,f)
+			end
+		end
+		dt = timer.getDelta()
+		timer.step()
+
+		main.update(dt)
+		if graphics.isActive() then
+			graphics.clear(bg)
+			main.draw()
+			graphics.present()
+		end
+
+		timer.sleep(0.01)
+	end
+end
 
 return debugger

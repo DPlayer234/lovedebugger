@@ -175,6 +175,13 @@ debugger.viewLocals(source, inLine, var, key)
 -- Calling it without any arguments will reset it. Calling it while running will override the
 -- existing routine.
 
+debugger.getStack(stack_level)
+-- Returns a table containing with each level of the current stack as its own table.
+-- Each of the stack-tables contains all local variables at that point as well as all a
+-- reference to the running function and whatever debug.getinfo gives out as a name.
+-- stack_level is the stack level to start looking at.
+-- stack_level = 1 >> Start at the function calling debugger.getStack
+
 debugger.varDisplay(...)
 -- Will display all given variables dynamically where FPS, Lua RAM etc. are displayed.
 -- This call is not additive and will override any previous calls!
@@ -185,6 +192,14 @@ debugger.aliasCommand(name, alias)
 -- Allows you to access the command of 'name' also as 'alias'. You cannot add variants to
 -- existing commands via the alias's title, create an alias with the name of another alias
 -- or command or create a new command with the name of an alias.
+
+debugger.errhand(error_message, stack_level)
+-- Override love.errhand with this function to use the debugger when the game crashes.
+-- It will write the traceback and entire stack (via debugger.getStack) to the global variables
+-- _stackTraceback and _stackLocals respectively.
+-- It is very likely to fail if the initial error was a stack overflow, though!
+-- If you want to use this within another error handler, please supply the stack_level in such
+-- a way that the traceback starts at the correct point.
 ```
 
 There's also a few constants that you may modify as well:
