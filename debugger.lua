@@ -343,7 +343,9 @@ function debugger.setOverrides(cb)
 		keyreleased = function() end,
 
 		mousepressed = function(x, y, button, istouch)
-			inputs["m"..tostring(button)] = true
+			if not istouch then
+				inputs["m"..tostring(button)] = true
+			end
 		end,
 
 		mousereleased = function() end,

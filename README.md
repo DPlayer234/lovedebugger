@@ -2,7 +2,7 @@
 
 (Not so) simple debugging tool for [Löve](https://www.love2d.org/), currently for Löve version 0.10.2 (may work with other versions).
 
-Download the 'debugger.lua' file and include it in your Lua path or game directory (I suggest against leaving debug code in releases).
+Download the 'debugger.lua' file (or 'debugger_t.lua' which is trimmed of whitespace) and include it in your Lua path or game directory (I suggest against leaving debug code in releases).
 
 ---
 
