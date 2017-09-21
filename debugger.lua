@@ -243,7 +243,7 @@ function debugger.tempClear()
 end
 
 -- This function will affect the order of the environment display.
--- You may rewrite this: It should get a table and return an array with the KEYS of the original table as its VALUES.
+-- You may rewrite this: It should get a table and return an array with the KEYS of the origCallback table as its VALUES.
 -- E.g. sortedTable({ x = 5, y = 2, a = "test" }) -> { "a", "x", "y" }
 local function sortCont(a, b) if type(a) == type(b) then return a<b else return tostring(a)<tostring(b) end end
 local function sortedTable(t, to)
@@ -275,96 +275,164 @@ local lastselect = 0
 local lastinput = {}
 local commands = {}
 
--- Storing original callbacks/overriding them to be used
+-- Storing origCallback callbacks/overriding them to be used
 local realKeyboard, realMouse, fakeKeyboard, fakeMouse
 
-local override, original = {}, {}
-local realKeypressed
-local initOver, callbacks
-function debugger.setOverrides(cb)
-	if initOver then
-		-- Removing old callbacks
-		callbacks.keypressed = realKeypressed
-
-		for k,v in pairs(original) do
-			callbacks[k] = v ~= "" and v or nil
+local overCallback = {
+	keypressed = function(key, scancode, isrepeat)
+		inputs[key] = true
+		if key == "backspace" then
+			if texttable[textPosition-1] then
+				remove(texttable, textPosition-1)
+				textPosition = textPosition - 1
+			end
+			while realKeyboard.isDown("lctrl", "rctrl") and texttable[textPosition-1] and find(texttable[textPosition-1], "%a") do
+				remove(texttable, textPosition-1)
+				textPosition = textPosition - 1
+			end
+		elseif key == "delete" then
+			if texttable[textPosition] then
+				remove(texttable, textPosition)
+			end
+			while realKeyboard.isDown("lctrl", "rctrl") and texttable[textPosition] and find(texttable[textPosition], "%a") do
+				remove(texttable, textPosition)
+			end
 		end
-	else
-		initOver = true
+	end,
+	textinput = function(text)
+		if text == "\n" or text == "\r" then text = " " end
+		if font:hasGlyphs(text) then
+			insert(texttable, textPosition, text)
+			textPosition = textPosition + 1
+		end
+	end,
+	keyreleased = function() end,
+	mousepressed = function(x, y, button, istouch)
+		if not istouch then
+			inputs["m"..tostring(button)] = true
+		end
+	end,
+	mousereleased = function() end,
+	mousemoved = function() end,
+	wheelmoved = function(x, y)
+		if y > 0 then
+			inputs.mneg = y
+		elseif y < 0 then
+			inputs.mpos = -y
+		end
 	end
+}
+local origCallback = {}
+local callbacks
+-- Sets the callback override structure. This should now allow for safe monkey-patching of existing
+-- callbacks and setting those same back... Might have weird results if you copy callbacks to other
+-- ones.
+function debugger.setOverrides(cb)
+	assert(getmetatable(cb) == nil, "ERROR:Cannot override callbacks on table with metatable")
+	if callbacks ~= nil then
+		setmetatable(callbacks, nil)
+
+		for k,v in pairs(origCallback) do
+			callbacks[k] = v
+		end
+	end
+
 	callbacks = cb
 
-	-- Overrides/Preventing game inputs while the console is opened.
-	local keypressed = function(key, scancode, isrepeat)
-		inputs[key] = true
-		if active then
-			if key == "backspace" then
-				if texttable[textPosition-1] then
-					remove(texttable, textPosition-1)
-					textPosition = textPosition - 1
+	local emptyFunction = function() end
+
+	local dummy = {}
+	local allDummy = setmetatable({}, {__mode="kv"})
+
+	local function setDummy(event, OVER_CALLBACK, ORIG_CALLBACK)
+		local DUMMY_CALLBACK
+		if event == "keypressed" then
+			DUMMY_CALLBACK = function(key, scancode, isrepeat)
+				if key == debugger.activate then
+					debugger.setActive(not active)
 				end
-				while realKeyboard.isDown("lctrl", "rctrl") and texttable[textPosition-1] and find(texttable[textPosition-1], "%a") do
-					remove(texttable, textPosition-1)
-					textPosition = textPosition - 1
+				if active then
+					return OVER_CALLBACK(key, scancode, isrepeat)
+				else
+					return ORIG_CALLBACK(key, scancode, isrepeat)
 				end
-			elseif key == "delete" then
-				if texttable[textPosition] then
-					remove(texttable, textPosition)
+			end
+		else
+			DUMMY_CALLBACK = function(...)
+				if active then
+					return OVER_CALLBACK(...)
+				else
+					return ORIG_CALLBACK(...)
 				end
-				while realKeyboard.isDown("lctrl", "rctrl") and texttable[textPosition] and find(texttable[textPosition], "%a") do
-					remove(texttable, textPosition)
+			end
+		end
+
+		dummy[event] = DUMMY_CALLBACK
+		allDummy[DUMMY_CALLBACK] = ORIG_CALLBACK
+	end
+
+	for k,v in pairs(overCallback) do
+		origCallback[k] = callbacks[k] or emptyFunction
+
+		setDummy(k, overCallback[k], origCallback[k])
+
+		callbacks[k] = nil
+	end
+
+	local getupvalue, setupvalue = debug.getupvalue, debug.setupvalue
+
+	local checked
+	local function replaceAllInstances(where, what, with)
+		if not checked[where] then
+			checked[where] = true
+
+			if type(where) == "function" then
+				local i = 0
+				local n, v
+				repeat
+					i = i + 1
+					n, v = getupvalue(where, i)
+					if v == what then
+						setupvalue(where, i, with)
+					elseif type(v) == "function" or type(v) == "table" then
+						replaceAllInstances(v, what, with)
+					end
+				until not n
+			else
+				for k,v in pairs(where) do
+					if v == what then
+						rawset(where, k, with)
+					elseif type(v) == "function" or type(v) == "table" then
+						replaceAllInstances(v, what, with)
+					end
+				end
+
+				local meta = getmetatable(where)
+				if meta then
+					replaceAllInstances(meta, what, with)
 				end
 			end
 		end
 	end
 
-	if cb.keypressed then
-		realKeypressed = cb.keypressed
-		cb.keypressed = function(...)
-			keypressed(...)
-			if not active then
-				realKeypressed(...)
-			end
-		end
-	else
-		realKeypressed = nil
-		cb.keypressed = keypressed
-	end
+	setmetatable(callbacks, {
+		__newindex = function(self, k, v)
+			if origCallback[k] then
+				if allDummy[v] then
+					v = allDummy[v]
+				else
+					checked = {}
+					replaceAllInstances(v, dummy[k], origCallback[k])
+				end
 
-	override = {
-		textinput = function(text)
-			if text == "\n" or text == "\r" then text = " " end
-			if font:hasGlyphs(text) then
-				insert(texttable, textPosition, text)
-				textPosition = textPosition + 1
+				rawset(origCallback, k, v)
+				setDummy(k, overCallback[k], v)
+			else
+				return rawset(self, k, v)
 			end
 		end,
-
-		keyreleased = function() end,
-
-		mousepressed = function(x, y, button, istouch)
-			if not istouch then
-				inputs["m"..tostring(button)] = true
-			end
-		end,
-
-		mousereleased = function() end,
-
-		mousemoved = function() end,
-
-		wheelmoved = function(x, y)
-			if y > 0 then
-				inputs.mneg = y
-			elseif y < 0 then
-				inputs.mpos = -y
-			end
-		end
-	}
-
-	original = {}
-	for k,v in pairs(override) do
-		original[k] = cb[k] or ""
-	end
+		__index = dummy
+	})
 end
 
 -- Making sure inputs are not sent to the game while the console is in use.
@@ -429,13 +497,10 @@ function debugger.setActive(status)
 			hastextinput = love.keyboard.hasTextInput()
 			love.keyboard.setTextInput(true)
 
-			if inputs[debugger.activate] and callbacks.keyreleased then
-				callbacks.keyreleased(debugger.activate,love.keyboard.getScancodeFromKey(debugger.activate))
+			if inputs[debugger.activate] and origCallback.keyreleased then
+				origCallback.keyreleased(debugger.activate,love.keyboard.getScancodeFromKey(debugger.activate))
 			end
 
-			for k,v in pairs(override) do
-				callbacks[k] = v
-			end
 			for k,v in pairs(fakeKeyboard) do
 				love.keyboard[k] = v
 			end
@@ -444,13 +509,6 @@ function debugger.setActive(status)
 			end
 		else
 			-- Disabling
-			for k,v in pairs(original) do
-				if v == "" then
-					callbacks[k] = nil
-				else
-					callbacks[k] = v
-				end
-			end
 			for k,v in pairs(realKeyboard) do
 				love.keyboard[k] = v
 			end
@@ -473,10 +531,6 @@ local updateTime = 0
 local fromPattern = "%[\"[_a-zA-Z][_a-zA-Z0-9]-\"%]"
 local nicerPush = function(t) return "."..sub(t, 3, #t-2) end
 function debugger.update(dt)
-	if inputs[debugger.activate] then
-		debugger.setActive()
-	end
-
 	if #lgtime > 0 then
 		local ctime = dep.getTime()
 		if lgtime[1] + debugger.textfade < ctime then
@@ -519,7 +573,7 @@ function debugger.update(dt)
 			local cbt = love.system.getClipboardText()
 			if type(cbt) == "string" then
 				for p,c in utf8_codes(cbt) do
-					override.textinput(utf8_char(c))
+					overCallback.textinput(utf8_char(c))
 				end
 			end
 		elseif (((inputs.lctrl or inputs.rctrl) and realKeyboard.isDown("c")) or (realKeyboard.isDown("lctrl", "rctrl") and inputs.c)) and love.system then
@@ -729,13 +783,13 @@ function debugger.update(dt)
 						else
 							-- Copying the variable name to the prompt
 							for p,c in utf8_codes(gsub(ndisplay, fromPattern, nicerPush)) do
-								override.textinput(utf8_char(c))
+								overCallback.textinput(utf8_char(c))
 							end
 						end
 					else
 						-- Copying the variable name to the prompt
 						for p,c in utf8_codes(gsub(display, fromPattern, nicerPush)) do
-							override.textinput(utf8_char(c))
+							overCallback.textinput(utf8_char(c))
 						end
 					end
 				else
