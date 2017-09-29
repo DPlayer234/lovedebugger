@@ -729,7 +729,7 @@ function debugger.update(dt)
 		if type(dv) == "table" then
 			index = sortedTable(dv, index)
 		elseif indexFunctions and type(dv) == "function" then
-			index = sortedTable(dv.___allupvalues, index)
+			index = sortedTable(dv.___allupvaluenames, index)
 		end
 		if not s then dv = nil end
 
@@ -1183,6 +1183,7 @@ function debugger.allowFunctionIndex(desc)
 
 	local upval = setmetatable({}, {__mode = "kv"})
 	local ret = setmetatable({}, {__mode = "kv", __index=function()return{}end})
+	local retn = setmetatable({}, {__mode = "kv"})
 	local getlist = function(f)
 		if upval[f] then
 			return upval[f]
@@ -1213,6 +1214,15 @@ function debugger.allowFunctionIndex(desc)
 				local _
 				for k,v in pairs(fup) do _, t[k] = getupvalue(f, v) end
 				return t
+			elseif k == "___allupvaluenames" then
+				if retn[f] then
+					return retn[f]
+				else
+					local t = {}
+					for k,v in pairs(fup) do t[k] = true end
+					retn[f] = t
+					return t
+				end
 			elseif k == "___code" then
 				if jitfuncinfo then
 					local info = jitfuncinfo(f)
