@@ -132,8 +132,6 @@ do
 end
 
 -- Print Calls / Wrapping the 'regular' print
-local realPrint = print
-
 local lg = {}
 local lgtemp = {}
 local lgtime = {}
@@ -218,13 +216,16 @@ local function proxyPrint(c, ...)
 	end
 end
 
+local realPrint = print
 debugger.print = proxyPrint
 debugger.realPrint = realPrint
 
-function print(...)
+function debugger.allPrint(...)
 	realPrint(...)
 	proxyPrint(color.white, ...)
 end
+
+print = debugger.allPrint
 
 local function printColor(c, ...)
 	realPrint(...)
@@ -354,6 +355,9 @@ function debugger.setOverrides(cb)
 				if active then
 					return OVER_CALLBACK(key, scancode, isrepeat)
 				else
+					if key == debugger.clearPrompt then
+						debugger.doTempPrint = not debugger.doTempPrint
+					end
 					return ORIG_CALLBACK(key, scancode, isrepeat)
 				end
 			end
@@ -842,10 +846,6 @@ function debugger.update(dt)
 				end
 			end
 		end
-	else
-		if inputs[debugger.clearPrompt] then
-			debugger.doTempPrint = not debugger.doTempPrint
-		end
 	end
 
 	for k,v in pairs(inputs) do
@@ -1324,7 +1324,10 @@ function debugger.allowFunctionIndex(desc)
 						if not v then
 							v = defined:match("[^_a-zA-Z0-9]([_a-zA-Z][%.%:_a-zA-Z0-9]*)%s*=%s*%(*function[^_a-zA-Z0-9]")
 							if not v then
-								v = "(unnamed)"
+								local __tostring = funcMeta.__tostring
+								funcMeta.__tostring = nil
+								v = tostring(f):match("0x%x+")
+								funcMeta.__tostring = __tostring
 							end
 						end
 						v = v.." ("..source..":"..tostring(linedefined)..")"
