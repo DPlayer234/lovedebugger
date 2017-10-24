@@ -324,14 +324,25 @@ local overCallback = {
 	end
 }
 local origCallback = {}
+local origCallbackMeta
 local callbacks
 -- Sets the callback override structure. This should now allow for safe monkey-patching of existing
 -- callbacks and setting those same back... Might have weird results if you copy callbacks to other
 -- ones.
 function debugger.setOverrides(cb)
-	assert(getmetatable(cb) == nil, "ERROR:Cannot override callbacks on table with metatable")
 	if callbacks ~= nil then
-		setmetatable(callbacks, nil)
+		if origCallbackMeta then
+			-- Restore original values to callback metatable
+			local meta = getmetatable(callbacks)
+
+			meta.__newindex = origCallbackMeta.__newindex
+			meta.__index = origCallbackMeta.__index
+
+			origCallbackMeta = nil
+		else
+			-- Remove callback metatable
+			setmetatable(callbacks, nil)
+		end
 
 		for k,v in pairs(origCallback) do
 			callbacks[k] = v
@@ -419,24 +430,70 @@ function debugger.setOverrides(cb)
 		end
 	end
 
-	setmetatable(callbacks, {
-		__newindex = function(self, k, v)
-			if origCallback[k] then
-				if allDummy[v] then
-					v = allDummy[v]
-				else
-					checked = {}
-					replaceAllInstances(v, dummy[k], origCallback[k])
-				end
-
-				rawset(origCallback, k, v)
-				setDummy(k, overCallback[k], v)
+	-- New callback meta functions
+	local setvalue = rawset
+	local __newindex = function(self, k, v)
+		if origCallback[k] then
+			if allDummy[v] then
+				v = allDummy[v]
 			else
-				return rawset(self, k, v)
+				checked = {}
+				replaceAllInstances(v, dummy[k], origCallback[k])
 			end
-		end,
-		__index = dummy
-	})
+
+			rawset(origCallback, k, v)
+			setDummy(k, overCallback[k], v)
+		else
+			return setvalue(self, k, v)
+		end
+	end
+	local __index = dummy
+
+	local cbMeta = getmetatable(callbacks)
+	if cbMeta then
+		-- Already has metatable
+		origCallbackMeta = {
+			__newindex = cbMeta.__newindex,
+			__index = cbMeta.__index
+		}
+
+		-- Make __newindex work correctly
+		if cbMeta.__newindex then
+			setvalue = cbMeta.__newindex
+		end
+		cbMeta.__newindex = __newindex
+
+		-- Make __index work correctly
+		if cbMeta.__index then
+			if type(cbMeta.__index) == "function" then
+				cbMeta.__index = function(t, k)
+					local v = rawget(__index, k)
+					if v ~= nil then
+						return v
+					else
+						return origCallbackMeta.__index(t, k)
+					end
+				end
+			else
+				cbMeta.__index = function(t, k)
+					local v = rawget(__index, k)
+					if v ~= nil then
+						return v
+					else
+						return origCallbackMeta.__index[k]
+					end
+				end
+			end
+		else
+			cbMeta.__index = __index
+		end
+	else
+		-- No metatable, set own
+		setmetatable(callbacks, {
+			__newindex = __newindex,
+			__index = __index
+		})
+	end
 end
 
 -- Making sure inputs are not sent to the game while the console is in use.
