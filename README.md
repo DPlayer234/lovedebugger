@@ -24,7 +24,7 @@ local debugger
 
 function love.load(arg)
 	debugger = require "debugger"
-	debugger.setOverrides()
+	debugger.setOverrides(love)
 	-- You cannot easily circumvent letting the debugger monkey-patch
 	-- some callbacks. Sorry. :/
 end
@@ -44,7 +44,7 @@ function love.draw()
 end
 ```
 
-*Do not change your callbacks after this point, or something may break.* This should not be a concern in most cases however.
+Changing your callbacks after this is possible. *Keep in mind that modifying or changing the metatable of the table storing callbacks (by default 'love') will break things.* You aren't allowed to change love.update and love.draw (or the update and draw function in your table) after the automatic setup.
 
 To open the Lua prompt and environment, hit 'F4' (debugger.activate).
 
@@ -133,6 +133,8 @@ debugger.setFont(font)
 debugger.getFont()
 -- Returns the currently used font
 
+debugger.allPrint(...)
+-- Prints text everywhere (the same as print after requiring the module)
 debugger.print(colorTable, ...)
 -- Print exclusively to the debugger's console in the defined color
 debugger.realPrint(...)
@@ -157,6 +159,11 @@ debugger.allowFunctionIndex(nicer_name)
 -- The optional argument is whether or not to also give functions
 -- better 'tostring' values (more easily readable/descriptive),
 -- like 'function: lib.func (lib.lua:4)' at the cost of some speed.
+-- If you want to give functions a specific name, define them like this:
+function myFunc()--[[my function name]] ... end
+myFunc2 = function()--[[my function name #2]] ... end
+-- Make sure not to put any spaces between the brackets and the comment
+-- and also to make sure it's a block comment on a single line.
 
 debugger.monitorGlobal(writeTo)
 -- Enables monitoring the global environment for unusual changes or activities

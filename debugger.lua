@@ -114,12 +114,10 @@ end
 -- Setting the font
 local font, fheight
 function debugger.setFont(nfont)
-	if nfont.type and nfont:type() == "Font" then
-		font = nfont
-		fheight = font:getHeight()*font:getLineHeight()
-	else
-		error(":Not a font.")
-	end
+	assert( getmetatable(nfont) and getmetatable(nfont).__index and nfont.type and nfont:type() == "Font", ":Not a font." )
+
+	font = nfont
+	fheight = font:getHeight()*font:getLineHeight()
 end
 function debugger.getFont()
 	return font
@@ -128,7 +126,7 @@ end
 do
 	debugger.setFont(love.graphics.getFont())
 	local s, lFont = pcall(require, "debugger_font")
-	if s then debugger.setFont(lFont) end
+	if s then pcall(debugger.setFont, lFont) end
 end
 
 -- Print Calls / Wrapping the 'regular' print
@@ -330,6 +328,8 @@ local callbacks
 -- callbacks and setting those same back... Might have weird results if you copy callbacks to other
 -- ones.
 function debugger.setOverrides(cb)
+	assert(type(cb) == "table", "Argument #1 to debugger.setOverrides(cb) must be a table.")
+
 	if callbacks ~= nil then
 		if origCallbackMeta then
 			-- Restore original values to callback metatable
@@ -547,8 +547,9 @@ fakeMouse = {
 
 -- Setting the current status of the debugger
 function debugger.setActive(status)
+	status = status and true
 	if status ~= active then
-		active = not active
+		active = status
 		if active then
 			-- Enabling
 			mousevisible = love.mouse.isVisible()
@@ -557,10 +558,6 @@ function debugger.setActive(status)
 			love.keyboard.setKeyRepeat(true)
 			hastextinput = love.keyboard.hasTextInput()
 			love.keyboard.setTextInput(true)
-
-			if inputs[debugger.activate] and origCallback.keyreleased then
-				origCallback.keyreleased(debugger.activate,love.keyboard.getScancodeFromKey(debugger.activate))
-			end
 
 			for k,v in pairs(fakeKeyboard) do
 				love.keyboard[k] = v
@@ -592,6 +589,8 @@ local updateTime = 0
 local fromPattern = "%[\"[_a-zA-Z][_a-zA-Z0-9]-\"%]"
 local nicerPush = function(t) return "."..sub(t, 3, #t-2) end
 function debugger.update(dt)
+	assert(type(dt) == "number", "Argument #1 to debugger.update(dt) must be a number!")
+
 	if #lgtime > 0 then
 		local ctime = dep.getTime()
 		if lgtime[1] + debugger.textfade < ctime then
@@ -1377,15 +1376,14 @@ function debugger.allowFunctionIndex(desc)
 						end
 					end
 					if defined then
-						v = defined:match("[^_a-zA-Z0-9]function%s+([_a-zA-Z][%.%:_a-zA-Z0-9]*)[^_a-zA-Z0-9]")
+						v = defined:match("%)%-%-%[%[(.-)%]%]")
+							or defined:match("[^_a-zA-Z0-9]function%s+([_a-zA-Z][%.%:_a-zA-Z0-9]*)[^_a-zA-Z0-9]")
+							or defined:match("[^_a-zA-Z0-9]([_a-zA-Z][%.%:_a-zA-Z0-9]*)%s*=%s*%(*function[^_a-zA-Z0-9]")
 						if not v then
-							v = defined:match("[^_a-zA-Z0-9]([_a-zA-Z][%.%:_a-zA-Z0-9]*)%s*=%s*%(*function[^_a-zA-Z0-9]")
-							if not v then
-								local __tostring = funcMeta.__tostring
-								funcMeta.__tostring = nil
-								v = tostring(f):match("0x%x+")
-								funcMeta.__tostring = __tostring
-							end
+							local __tostring = funcMeta.__tostring
+							funcMeta.__tostring = nil
+							v = tostring(f):match("0x%x+")
+							funcMeta.__tostring = __tostring
 						end
 						v = v.." ("..source..":"..tostring(linedefined)..")"
 					end
@@ -1504,6 +1502,8 @@ function debugger.viewLocals(src, inLine, var, key)
 end
 
 function debugger.getStack(stack)
+	assert(stack == nil or type(stack) == "number", "Argument #1 to debugger.getStack(stack) must be a number or nil.")
+
 	stack = (stack or 1) + 1
 	local getinfo = debug.getinfo
 	local getlocal = debug.getlocal
@@ -1567,9 +1567,9 @@ function debugger.varDisplay(...)
 end
 
 function debugger.newCommand(name, args, func)
-	assert(type(name) == "string", "Command Name has to be a string!")
-	assert(type(args) == "string", "Argument Pattern has to be a string!")
-	assert(type(func) == "function" or getmetatable(func) and rawget(getmetatable(func), "__call"), "Argument function needs to be callable!")
+	assert(type(name) == "string", "Argument #1 to debugger.newCommand(name, args, func) must be a string!")
+	assert(type(args) == "string", "Argument #2 to debugger.newCommand(name, args, func) must be a string!")
+	assert(type(func) == "function" or getmetatable(func) and rawget(getmetatable(func), "__call"), "Argument #3 to debugger.newCommand(name, args, func) must be callable!")
 
 	if commands[name] == nil then
 		commands[name] = { name = name, alias = {} }
@@ -1584,12 +1584,14 @@ function debugger.newCommand(name, args, func)
 end
 
 function debugger.aliasCommand(name, as)
-	if commands[as] == nil then
-		commands[as] = commands[name]
-		commands[name].alias[#commands[name].alias+1] = as
-	else
-		error(":Command '"..tostring(name).."' exists already.")
-	end
+	assert(type(name) == "string", "Argument #1 to debugger.aliasCommand(name, as) must be a string!")
+	assert(type(as)   == "string", "Argument #2 to debugger.aliasCommand(name, as) must be a string!")
+
+	assert(commands[name] ~= nil, ":Command '"..name.."' doesn't exist!")
+	assert(commands[as] == nil, ":Command '"..as.."' exists already.")
+
+	commands[as] = commands[name]
+	commands[name].alias[#commands[name].alias+1] = as
 end
 
 -- Adding some default commands!
@@ -1671,6 +1673,9 @@ setmetatable(debugger, {
 		-- Auto-Injection
 		if other == nil then other = love end
 		if cb == nil then cb = other end
+
+		assert(type(other) == "table", "Argument #1 to debugger(other, cb) must be a table or nil!")
+		assert(type(other) == "table", "Argument #2 to debugger(other, cb) must be a table or nil!")
 
 		self.setOverrides(cb)
 
