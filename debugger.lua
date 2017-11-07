@@ -679,7 +679,7 @@ function debugger.update(dt)
 					for i=1, #args do
 						local v = args[i]
 						if tonumber(v) then
-							pattern = pattern.."[ns]"
+							pattern = pattern.."[bns]"
 						elseif v == "true" or v == "false" then
 							pattern = pattern.."[bs]"
 						else
@@ -708,11 +708,7 @@ function debugger.update(dt)
 							if c == "n" then
 								args[i] = tonumber(args[i])
 							elseif c == "b" then
-								if args[i] == "true" then
-									args[i] = true
-								elseif args[i] == "false" then
-									args[i] = false
-								end
+								args[i] = args[i] ~= "false" and args[i] ~= "0"
 							end
 						end
 
@@ -1476,7 +1472,11 @@ function debugger.viewLocals(src, inLine, var, key)
 		end
 
 		if type(src) == "function" then
-			src = getinfo(src, "S").short_src
+			src = getinfo(src, "S").source
+		elseif type(src) == "string" then
+			src = "@"..src
+		else
+			error("Argument #1 to debugger.viewLocals(src, inLine, var, key) must be a function or string!")
 		end
 		if type(inLine) ~= "number" then
 			printColor(color.red, "You need to pass the line to check in!")
@@ -1486,7 +1486,7 @@ function debugger.viewLocals(src, inLine, var, key)
 		printColor(color.blue, "Enabled local viewer.\nAny future passes on that line will now write a table!")
 
 		sethook(function(event, line)
-			if line == inLine and src == getinfo(2, "S").short_src then
+			if line == inLine and src == getinfo(2, "S").source then
 				local locals = {}
 				local i = 1
 				local n, v = getlocal(2, i)
