@@ -6,6 +6,7 @@ as published by Sam Hocevar. See the COPYING file for more details.
 ]]
 
 local debugger = {}
+local profile
 
 debugger.activate    = "f4" -- Löve KeyConstant of the key used to open the console. (Default: 'f4')
 debugger.clearPrompt = "f5" -- Löve KeyConstant of the key used to clear the Lua prompt and toggle 'debugger.doTempPrint'. (Default: 'f5')
@@ -124,6 +125,7 @@ function debugger.getFont()
 end
 
 do
+	-- Loading font in lua path
 	debugger.setFont(love.graphics.getFont())
 	local s, lFont = pcall(require, "debugger_font")
 	if s then pcall(debugger.setFont, lFont) end
@@ -581,7 +583,7 @@ function debugger.setActive(status)
 	end
 end
 
-local indexFunctions = false
+local indexFunctions, prettyFunctions = false, false
 local updateEvents = {}
 
 local updateTime = 0
@@ -911,6 +913,14 @@ function debugger.update(dt)
 		end
 	end
 
+	if profile ~= nil and profile.running then
+		profile.frame = profile.frame + 1
+		if profile.frame % profile.interval == 0 then
+			profile.addReport()
+			profile.lib.reset()
+		end
+	end
+
 	updateTime = dep.getTime()
 end
 
@@ -1219,19 +1229,16 @@ end
 -- Up-Value-getter
 function debugger.allowFunctionIndex(desc)
 	indexFunctions = true
-	printColor(color.red, "\tAllowing the indexing of functions for up-values might cause code-instability.\nTherefore access to indexing is only allowed within the command line.")
+	printColor(color.red, "\tAllowing the indexing of functions!\nAccess to indexing is only allowed within the command line.")
 
 	local getupvalue = debug.getupvalue
 	local setupvalue = debug.setupvalue
 	local traceback  = debug.traceback
-	local jitfuncinfo, isFile, lines
-	pcall(function()
-		jitfuncinfo = require("jit").util.funcinfo
+	local getinfo = debug.getinfo
 
-		local filesystem = require("love.filesystem")
-		isFile = filesystem.isFile
-		lines = filesystem.lines
-	end)
+	local filesystem = require("love.filesystem")
+	local isFile = filesystem.isFile
+	local lines = filesystem.lines
 
 	local upval = setmetatable({}, {__mode = "kv"})
 	local ret = setmetatable({}, {__mode = "kv", __index=function()return{}end})
@@ -1276,8 +1283,8 @@ function debugger.allowFunctionIndex(desc)
 					return t
 				end
 			elseif k == "___code" then
-				if jitfuncinfo then
-					local info = jitfuncinfo(f)
+				if getinfo then
+					local info = getinfo(f, "S")
 					local source = gsub((info.source or ""), "^@", "")
 					if isFile(source) then
 						local i = 0
@@ -1318,7 +1325,9 @@ function debugger.allowFunctionIndex(desc)
 		--__metatable = false
 	}
 
-	if desc and jitfuncinfo then
+	if desc and getinfo then
+		prettyFunctions = true
+
 		local amount, bytes = 1, 5
 		local hardnames = {
 			[realPrint] = "print"
@@ -1357,7 +1366,7 @@ function debugger.allowFunctionIndex(desc)
 			__index = function(t, f)
 				local v
 
-				local info = jitfuncinfo(f)
+				local info = getinfo(f, "S")
 				local source = gsub((info.source or ""), "^@", "")
 				local linedefined = info.linedefined
 				if isFile(source) and linedefined then
@@ -1381,21 +1390,20 @@ function debugger.allowFunctionIndex(desc)
 							v = tostring(f):match("0x%x+")
 							funcMeta.__tostring = __tostring
 						end
-						v = v.." ("..source..":"..tostring(linedefined)..")"
 					end
 				end
 
 				if v then
-					v = "function: "..v
+					v = "function: "..v.." ("..info.short_src..":"..tostring(linedefined)..")"
 					if hardnames[f] then
 						hardnames[f] = nil
 					end
 				elseif hardnames[f] then
-					v = "function: "..hardnames[f]
+					v = "function: "..hardnames[f].." (ext)"
 				else
 					local __tostring = funcMeta.__tostring
 					funcMeta.__tostring = nil
-					v = tostring(f)
+					v = tostring(f).." ("..info.short_src..":"..tostring(linedefined)..")"
 					funcMeta.__tostring = __tostring
 				end
 
@@ -1409,6 +1417,8 @@ function debugger.allowFunctionIndex(desc)
 		end
 
 		printColor(color.blue, "\tAdded "..tostring(amount).." function names for predefined functions, totalling "..tostring(bytes).." characters.")
+	else
+		prettyFunctions = false
 	end
 
 	debug.setmetatable(function()end, funcMeta)
@@ -1521,12 +1531,12 @@ function debugger.getStack(stack)
 		var[i] = this
 
 		local l = 1
-    while true do
-      local name, value = getlocal(stack, l)
-      if not name then break end
-      this[name] = value
-      l = l + 1
-    end
+	    while true do
+	      local name, value = getlocal(stack, l)
+	      if not name then break end
+	      this[name] = value
+	      l = l + 1
+	    end
 
 		stack = stack + 1
 		stackInfo = getinfo(stack, "fn")
@@ -1564,6 +1574,132 @@ function debugger.varDisplay(...)
 		getAdditionalInfo = function() end
 		printColor(color.yellow, ":Reset Var. Display.")
 	end
+end
+
+function debugger.setProfiler(profileLib, reportPath)
+	assert(profile == nil, ":Profiler already set.")
+	if type(reportPath) ~= "string" then reportPath = "profiler.txt" end
+
+	local _profile = {
+		lib = profileLib,
+		frame = 0, interval = 100,
+		sort = "time", rows = 20,
+		running = false
+	}
+
+	local reportFile
+	function _profile.addReport()
+		reportFile:write(profile.lib.report(profile.sort, profile.rows).."\n")
+	end
+
+	function debugger.startProfiler()
+		if profile.running then
+			return ":Profiler already running."
+		else
+			profile.frame = 0
+			profileLib.start()
+
+			if not love.filesystem.isFile(reportPath) then
+				love.filesystem.write(reportPath, "")
+			end
+
+			reportFile = love.filesystem.newFile(reportPath, "a")
+
+			profile.running = true
+
+			return ":Started the profiler"
+		end
+	end
+
+	function debugger.stopProfiler()
+		if profile.running then
+			profileLib.stop()
+
+			profile.running = false
+
+			reportFile:flush()
+			reportFile:close()
+			reportFile = nil
+
+			return ":Stopped the profiler."
+		else
+			return ":Profiler wasn't running."
+		end
+	end
+
+	function debugger.setProfilerInterval(interval)
+		assert(type(interval) == "number", ":Argument #1 to debugger.setProfilerInterval(interval) has to be a number.")
+		profile.interval = interval
+
+		return ":Set report interval to "..tostring(interval).." frame(s)."
+	end
+
+	function debugger.setProfilerReportArgs(sort, rows)
+		assert(sort == "time" or sort == "call" or sort == nil, ":Argument #1 to debugger.setProfilerReportArgs(sort, rows) has to be 'time' or 'call'.")
+		assert(type(rows) == "number" and rows > 0 or rows == nil, ":Argument #2 to debugger.setProfilerReportArgs(sort, rows) has to be a number.")
+
+		profile.sort = sort or "time"
+		profile.rows = rows or 20
+
+		return ":Set report arguments to '"..profile.sort.."' (sort) and "..tostring(profile.rows).." (rows)."
+	end
+
+	debugger.newCommand("pstart", "", debugger.startProfiler)
+	debugger.newCommand("pstop", "", debugger.stopProfiler)
+	debugger.newCommand("pinterval", "n", debugger.setProfilerInterval)
+	debugger.newCommand("preport", "sn", debugger.setProfilerReportArgs)
+	debugger.newCommand("preport", "s", debugger.setProfilerReportArgs)
+	debugger.newCommand("preport", "", debugger.setProfilerReportArgs)
+
+	profileLib.hookall("Lua")
+
+	local function unhook(table)
+		for k,v in pairs(table) do
+			if type(v) == "function" then
+				profileLib.unhook(v)
+			end
+		end
+	end
+
+	-- Unhook debugger functions
+	unhook(debugger)
+	unhook(overCallback)
+	unhook(fakeKeyboard)
+	unhook(fakeMouse)
+	unhook(dep)
+	unhook {
+		tostring,
+		count,
+		sortCont,
+		sortedTable,
+		promtPrint,
+		infoTitle,
+		infoBox,
+		notInDebugger,
+		cloneList,
+		checkUtf8,
+		getLines,
+		printColor,
+		rfalse,
+		nicerPush,
+		getmetatable(debugger).__call
+	}
+
+	if indexFunctions and prettyFunctions then
+		-- If the profiler given is not compatible, this will crash!
+		-- I don't take any responsibility for that.
+		_defined = profileLib.hook._defined
+
+		setmetatable(_defined, {
+			__newindex = function(t, k, v)
+				if v ~= nil then
+					rawset(t, k, (tostring(k):gsub("function: ", "")))
+				end
+			end
+		})
+	end
+
+	profile = _profile
 end
 
 function debugger.newCommand(name, args, func)

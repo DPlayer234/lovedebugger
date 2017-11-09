@@ -123,9 +123,7 @@ By default, the module will assume that callbacks and the update and draw functi
 local debugger = require "debugger" (update_and_draw_here, callbacks_here)
 ```
 
-Furthermore, if you went the manual route, `debugger.setOverrides` allows for an optional argument: A table storing all callbacks.
-
-There's also a few additional functions you may access if required.
+Then there's also a few additional debugger functions you may access if required.
 
 ```lua
 debugger.setFont(font)
@@ -246,6 +244,53 @@ debugger.color = {...}
 -- fgActive, fgActive2, bgActive,
 -- fgNotActive, bgNotActive
 ```
+
+---
+
+## profile.lua
+
+This debugger also supports using [profile.lua](https://bitbucket.org/itraykov/profile.lua/src/):
+
+```lua
+-- Require profile.lua and pass it as the only argument to this function
+debugger.setProfiler(require "profile")
+
+-- Keep in mind that this may only give a vague error if the profiler is not supported.
+
+-- Optionally, you may add a second argument defining the file in which to store the reports
+debugger.setProfiler(require "profile", "my_file.txt")
+```
+
+Once set, you can use it relatively easily:
+
+```lua
+debugger.startProfiler()
+-- Starts the profiler
+
+debugger.stopProfiler()
+-- Stops it
+
+debugger.setProfilerInterval(frames)
+-- How often the profiler should save a report and reset
+-- The default interval is 100.
+
+debugger.setProfilerReportArgs(sort, rows)
+-- What arguments are passed to profile.report(sort, rows)
+-- The defaults are "time" and 20.
+```
+
+Or use these commands to control it instead:
+
+```
+/pstart
+/pstop
+/pinterval <frames>
+/preport [sort] [rows]
+```
+
+The reports are saved to the file 'profiler.txt' or whatever is given as the second argument to debugger.setProfiler.
+
+If you want the profiler's reports to use the function name returned by tostring after calling debugger.allowFunctionIndex(true), make sure to do the latter first.
 
 ---
 
