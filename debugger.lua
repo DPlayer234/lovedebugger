@@ -1688,7 +1688,7 @@ function debugger.setProfiler(profileLib, reportPath)
 	if indexFunctions and prettyFunctions then
 		-- If the profiler given is not compatible, this will crash!
 		-- I don't take any responsibility for that.
-		_defined = profileLib.hook._defined
+		local _defined = profileLib.hook._defined
 
 		setmetatable(_defined, {
 			__newindex = function(t, k, v)
