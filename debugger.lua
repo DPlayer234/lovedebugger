@@ -494,17 +494,17 @@ end
 
 -- Making sure inputs are not sent to the game while the console is in use.
 realKeyboard = {
-	isDown = love.keyboard.isDown,
-	isScancodeDown = love.keyboard.isScancodeDown,
-	setKeyRepeat = love.keyboard.setKeyRepeat,
-	hasKeyRepeat = love.keyboard.hasKeyRepeat,
-	setTextInput = love.keyboard.setTextInput,
-	hasTextInput = love.keyboard.hasTextInput
+	isDown = love_keyboard.isDown,
+	isScancodeDown = love_keyboard.isScancodeDown,
+	setKeyRepeat = love_keyboard.setKeyRepeat,
+	hasKeyRepeat = love_keyboard.hasKeyRepeat,
+	setTextInput = love_keyboard.setTextInput,
+	hasTextInput = love_keyboard.hasTextInput
 }
 realMouse = {
-	isDown = love.mouse.isDown,
-	setVisible = love.mouse.setVisible,
-	isVisible = love.mouse.isVisible,
+	isDown = love_mouse.isDown,
+	setVisible = love_mouse.setVisible,
+	isVisible = love_mouse.isVisible,
 }
 
 local mousevisible = false
@@ -548,31 +548,31 @@ function debugger.setActive(status)
 		active = status
 		if active then
 			-- Enabling
-			mousevisible = love.mouse.isVisible()
-			love.mouse.setVisible(true)
-			keyrepeat = love.keyboard.hasKeyRepeat()
-			love.keyboard.setKeyRepeat(true)
-			hastextinput = love.keyboard.hasTextInput()
-			love.keyboard.setTextInput(true)
+			mousevisible = love_mouse.isVisible()
+			love_mouse.setVisible(true)
+			keyrepeat = love_keyboard.hasKeyRepeat()
+			love_keyboard.setKeyRepeat(true)
+			hastextinput = love_keyboard.hasTextInput()
+			love_keyboard.setTextInput(true)
 
 			for k,v in next, fakeKeyboard do
-				love.keyboard[k] = v
+				love_keyboard[k] = v
 			end
 			for k,v in next, fakeMouse do
-				love.mouse[k] = v
+				love_mouse[k] = v
 			end
 		else
 			-- Disabling
 			for k,v in next, realKeyboard do
-				love.keyboard[k] = v
+				love_keyboard[k] = v
 			end
 			for k,v in next, realMouse do
-				love.mouse[k] = v
+				love_mouse[k] = v
 			end
 
-			love.mouse.setVisible(mousevisible)
-			love.keyboard.setKeyRepeat(keyrepeat)
-			love.keyboard.setTextInput(hastextinput)
+			love_mouse.setVisible(mousevisible)
+			love_keyboard.setKeyRepeat(keyrepeat)
+			love_keyboard.setTextInput(hastextinput)
 		end
 	end
 end
@@ -786,8 +786,8 @@ function debugger.update(dt)
 		if not s then dv = nil end
 
 		if (inputs.m1 or inputs.m2) then
-			if love.mouse.getX() >= ceil(love_graphics.getWidth()*debugger.printArea) then
-				local nid = floor(love.mouse.getY()/fheight-2)
+			if love_mouse.getX() >= ceil(love_graphics.getWidth()*debugger.printArea) then
+				local nid = floor(love_mouse.getY()/fheight-2)
 				local shift = realKeyboard.isDown("lshift", "rshift")
 
 				if nid >= 0 then
