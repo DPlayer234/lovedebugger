@@ -39,13 +39,14 @@ debugger.color = {          -- Various colors used
 -- Controller/Joystick inputs won't be disabled, so feel free to use a controller while testing/debugging.
 local require = require
 
-local debug = require("debug")
-local utf8 = require("utf8")
-local love = require("love")
-if not love.keyboard then require("love.keyboard") end
-if not love.mouse then require("love.mouse") end
-if not love.graphics then require("love.graphics") end
-if not love.event then require("love.event") end
+local debug = require "debug"
+local utf8 = require "utf8"
+local love = require "love"
+local love_keyboard = require "love.keyboard"
+local love_mouse = require "love.mouse"
+local love_graphics = require "love.graphics"
+local love_event = require "love.event"
+local love_timer = require "love.timer"
 
 local collectgarbage = collectgarbage
 local setmetatable, getmetatable = setmetatable, debug.getmetatable
@@ -60,7 +61,7 @@ local utf8_len, utf8_codes, utf8_char, utf8_offset = utf8.len, utf8.codes, utf8.
 local type = type
 local pcall = pcall
 local loadstring = loadstring or load
-local pairs, ipairs = pairs, ipairs
+local pairs, next, ipairs = pairs, next, ipairs
 local _tostring, tonumber = tostring, tonumber
 local tostring = function(t)
 	local s, r = pcall(_tostring, t)
@@ -69,24 +70,16 @@ end
 local error = error
 
 -- Dependencies, yes, I require those. *BADUM-TSS*
-local dep = {getFPS=nil, getTime=nil}
-if love.timer then
-	dep.getFPS = love.timer.getFPS
-	dep.getTime = love.timer.getTime
-else
-	local time = 0
-	dep.getFPS = --[[]]function() return 0/0 end
-	dep.getTime = --[[]]function() time = time + 1/60 return time end
-end
+local titleManager = {}
 if love.window then
-	dep.getTitle = love.window.getTitle
-	dep.setTitle = love.window.setTitle
-	dep.titleUpdated = false
+	titleManager.getTitle = love.window.getTitle
+	titleManager.setTitle = love.window.setTitle
+	titleManager.titleUpdated = false
 
-	local title = dep.getTitle()
+	local title = titleManager.getTitle()
 	local updated = false
-	dep.getRegularTitle = --[[]]function() return title end
-	love.window.getTitle = dep.getRegularTitle
+	titleManager.getRegularTitle = --[[]]function() return title end
+	love.window.getTitle = titleManager.getRegularTitle
 	love.window.setTitle = --[[]]function(new)
 		local oftype = type(new)
 		if type(new) == "string" then
@@ -96,18 +89,18 @@ if love.window then
 		else
 			error("Bad argument #1 to '?' (string expected, got "..type(new)..")", 2)
 		end
-		dep.titleUpdated = true
+		titleManager.titleUpdated = true
 	end
 else
-	dep.getTitle = --[[]]function()return""end
-	dep.setTitle = --[[]]function()end
-	dep.titleUpdated = false
+	titleManager.getTitle = --[[]]function()return""end
+	titleManager.setTitle = --[[]]function()end
+	titleManager.titleUpdated = false
 end
 
 local function cloneList(t)
 	local n = {}
-	for i,v in ipairs(t) do
-		n[i] = v
+	for i=1, #t do
+		n[i] = t[i]
 	end
 	return n
 end
@@ -126,7 +119,7 @@ end
 
 do
 	-- Loading font in lua path
-	debugger.setFont(love.graphics.getFont())
+	debugger.setFont(love_graphics.getFont())
 	local s, lFont = pcall(require, "debugger_font")
 	if s then pcall(debugger.setFont, lFont) end
 end
@@ -140,7 +133,8 @@ local color = debugger.color
 local function checkUtf8(s) return utf8_len(s) and true end
 local function getLines(sf)
 	local nl = 0
-	for i,v in ipairs(sf) do
+	for i=1, #sf do
+		local v = sf[i]
 		if type(v) == "string" then
 			local _, n = gsub(v, "\n", "\n")
 			nl = nl + n
@@ -153,7 +147,7 @@ local lastPrint, printedTimes
 local function proxyPrint(c, ...)
 	local args = {...}
 	local top = 0
-	for i,v in pairs(args) do
+	for i,v in next, args do
 		args[i] = gsub(tostring(v), "[%z\r]", "")
 		local valid = checkUtf8(args[i])
 		if not valid then
@@ -175,7 +169,7 @@ local function proxyPrint(c, ...)
 	local t = concat(args, debugger.replaceTabs or "\t")
 
 	if t ~= lastPrint then
-		local time = dep.getTime()
+		local time = love_timer.getTime()
 		for s in gmatch(t, "[^\n]*\n") do
 			insert(lg, c)
 			insert(lg, s)
@@ -186,12 +180,12 @@ local function proxyPrint(c, ...)
 			insert(lgtime, time)
 		end
 
-		while #lg > 2 and #lg*0.5 > love.graphics.getHeight()/fheight - 1 do
+		while #lg > 2 and #lg*0.5 > love_graphics.getHeight()/fheight - 1 do
 			remove(lg, 1)
 			remove(lg, 1)
 		end
 
-		while #lgtemp > 2 and #lgtemp*0.5 > love.graphics.getHeight()/fheight - 1 do
+		while #lgtemp > 2 and #lgtemp*0.5 > love_graphics.getHeight()/fheight - 1 do
 			remove(lgtemp, 1)
 			remove(lgtemp, 1)
 		end
@@ -207,11 +201,11 @@ local function proxyPrint(c, ...)
 		end
 		if #lgtemp > 1 then
 			lgtemp[#lgtemp] = lg[#lg]
-			lgtime[#lgtime] = dep.getTime()
+			lgtime[#lgtime] = love_timer.getTime()
 		else
 			lgtemp[1] = lg[#lg-1]
 			lgtemp[2] = lg[#lg]
-			lgtime[1] = dep.getTime()
+			lgtime[1] = love_timer.getTime()
 		end
 	end
 end
@@ -222,25 +216,25 @@ debugger.realPrint = realPrint
 
 function debugger.allPrint(...)
 	realPrint(...)
-	proxyPrint(color.white, ...)
+	return proxyPrint(color.white, ...)
 end
 
 print = debugger.allPrint
 
-local function printColor(c, ...)
-	realPrint(...)
-	proxyPrint(c, ...)
+local function printColor(c, text)
+	realPrint(text)
+	return proxyPrint(c, text)
 end
 
 -- Clearing print calls
 function debugger.clear()
-	for k,v in pairs(lg) do lg[k] = nil end
+	for k,v in next, lg do lg[k] = nil end
 	debugger.tempClear()
 end
 
 function debugger.tempClear()
-	for k,v in pairs(lgtemp) do lgtemp[k] = nil end
-	for k,v in pairs(lgtime) do lgtime[k] = nil end
+	for k,v in next, lgtemp do lgtemp[k] = nil end
+	for k,v in next, lgtime do lgtime[k] = nil end
 end
 
 -- This function will affect the order of the environment display.
@@ -250,13 +244,13 @@ local function sortCont(a, b) if type(a) == type(b) then return a<b else return 
 local function sortedTable(t, to)
 	local tx
 	if to then
-		for k,v in pairs(to) do to[k] = nil end
+		for k,v in next, to do to[k] = nil end
 		tx = to
 	else
 		tx = {}
 	end
 
-	for k,v in pairs(t) do
+	for k,v in next, t do
 		tx[#tx+1] = k
 	end
 	pcall(sort, tx, sortCont) -- <= Real Sorting
@@ -416,7 +410,7 @@ function debugger.setOverrides(cb)
 					end
 				until not n
 			else
-				for k,v in pairs(where) do
+				for k,v in next, where do
 					if v == what then
 						rawset(where, k, with)
 					elseif type(v) == "function" or type(v) == "table" then
@@ -561,18 +555,18 @@ function debugger.setActive(status)
 			hastextinput = love.keyboard.hasTextInput()
 			love.keyboard.setTextInput(true)
 
-			for k,v in pairs(fakeKeyboard) do
+			for k,v in next, fakeKeyboard do
 				love.keyboard[k] = v
 			end
-			for k,v in pairs(fakeMouse) do
+			for k,v in next, fakeMouse do
 				love.mouse[k] = v
 			end
 		else
 			-- Disabling
-			for k,v in pairs(realKeyboard) do
+			for k,v in next, realKeyboard do
 				love.keyboard[k] = v
 			end
-			for k,v in pairs(realMouse) do
+			for k,v in next, realMouse do
 				love.mouse[k] = v
 			end
 
@@ -594,7 +588,7 @@ function debugger.update(dt)
 	assert(type(dt) == "number", "Argument #1 to debugger.update(dt) must be a number!")
 
 	if #lgtime > 0 then
-		local ctime = dep.getTime()
+		local ctime = love_timer.getTime()
 		if lgtime[1] + debugger.textfade < ctime then
 			remove(lgtemp, 1)
 			remove(lgtemp, 1)
@@ -691,7 +685,8 @@ function debugger.update(dt)
 					pattern = pattern.."$"
 
 					local this
-					for i,v in ipairs(command) do
+					for i=1, #command do
+						local v = command[i]
 						if pattern == "" then
 							if v.args == "" then
 								this = v
@@ -743,9 +738,8 @@ function debugger.update(dt)
 				local r = { pcall(f, getmetatable) }
 				if r[1] == true then
 					if #r > 1 then
-						--for i,v in ipairs(r) do r[i] = type(v)..":"..tostring(v) end
 						local max = 0
-						for i,v in pairs(r) do if i > max then max = i end end
+						for i,v in next, r do if i > max then max = i end end
 						for i=2, max do r[i-1] = r[i] r[i] = nil end
 						for i=1, max-1 do
 							local v = r[i]
@@ -792,7 +786,7 @@ function debugger.update(dt)
 		if not s then dv = nil end
 
 		if (inputs.m1 or inputs.m2) then
-			if love.mouse.getX() >= ceil(love.graphics.getWidth()*debugger.printArea) then
+			if love.mouse.getX() >= ceil(love_graphics.getWidth()*debugger.printArea) then
 				local nid = floor(love.mouse.getY()/fheight-2)
 				local shift = realKeyboard.isDown("lshift", "rshift")
 
@@ -900,10 +894,10 @@ function debugger.update(dt)
 				end
 			end
 		end
-	end
 
-	for k,v in pairs(inputs) do
-		inputs[k] = nil
+		for k,v in next, inputs do
+			inputs[k] = nil
+		end
 	end
 
 	for i=1, #updateEvents do
@@ -921,7 +915,7 @@ function debugger.update(dt)
 		end
 	end
 
-	updateTime = dep.getTime()
+	updateTime = love_timer.getTime()
 end
 
 function debugger.addUpdate(func, prio)
@@ -948,9 +942,6 @@ local function count(str, patt)
 end
 
 -- Draw Function(s)
-local lgraphics = love.graphics
--- If there only was something like an import statement...
-local graphics_print, graphics_printf, graphics_rectangle, graphics_push, graphics_origin, graphics_setFont, graphics_getFont, graphics_setScissor, graphics_getScissor, graphics_setShader, graphics_getShader, graphics_setBlendMode, graphics_getBlendMode, graphics_setColorMask, graphics_getColorMask, graphics_setWireframe, graphics_isWireframe, graphics_setColor, graphics_getColor, graphics_getDimensions, graphics_pop = lgraphics.print, lgraphics.printf, lgraphics.rectangle, lgraphics.push, lgraphics.origin, lgraphics.setFont, lgraphics.getFont, lgraphics.setScissor, lgraphics.getScissor, lgraphics.setShader, lgraphics.getShader, lgraphics.setBlendMode, lgraphics.getBlendMode, lgraphics.setColorMask, lgraphics.getColorMask, lgraphics.setWireframe, lgraphics.isWireframe, lgraphics.setColor, lgraphics.getColor, lgraphics.getDimensions, lgraphics.pop
 
 local reppatt = "[\r\n\t\v\\%z\"]"
 local rep = { ["\n"] = "\\n", ["\r"] = "\\r", ["\t"] = "\\t", ["\v"] = "\\v", ["\\"] = "\\\\", ["\0"] = "\\0", ["\""] = "\\\"" }
@@ -959,12 +950,12 @@ local function promtPrint(w, h, fheight)
 	local prompt = concat(texttable)
 	local width = font:getWidth(prompt)
 	local x = width < w and 0 or w-width
-	graphics_print(prompt, x, h-fheight)
-	if dep.getTime()%0.5 >= 0.25 then
+	love_graphics.print(prompt, x, h-fheight)
+	if love_timer.getTime()%0.5 >= 0.25 then
 		if textPosition > #texttable then
-			graphics_rectangle("fill", font:getWidth(prompt), h-fheight, font:getWidth(" "), fheight)
+			love_graphics.rectangle("fill", font:getWidth(prompt), h-fheight, font:getWidth(" "), fheight)
 		else
-			graphics_rectangle("fill", font:getWidth(concat(texttable, "", 1, textPosition-1))+x, h-fheight, font:getWidth(concat(texttable, "", textPosition, textPosition))-1, fheight)
+			love_graphics.rectangle("fill", font:getWidth(concat(texttable, "", 1, textPosition-1))+x, h-fheight, font:getWidth(concat(texttable, "", textPosition, textPosition))-1, fheight)
 		end
 	end
 end
@@ -987,33 +978,33 @@ local __infoTitleFormat, __infoBoxFormat = infoTitleFormat, infoBoxFormat
 -- Drawing everything
 function debugger.draw()
 	-- Storing the current graphics state and resetting it
-	graphics_push()
-	graphics_origin()
+	love_graphics.push()
+	love_graphics.origin()
 
 	local ram = collectgarbage("count")
 
 	fheight = abs(font:getHeight()*font:getLineHeight())
 
-	local oldfont = graphics_getFont()
-	graphics_setFont(font)
+	local oldfont = love_graphics.getFont()
+	love_graphics.setFont(font)
 
-	local xs, ys, ws, hs = graphics_getScissor()
-	graphics_setScissor()
+	local xs, ys, ws, hs = love_graphics.getScissor()
+	love_graphics.setScissor()
 
-	local oldshader = graphics_getShader()
-	graphics_setShader()
+	local oldshader = love_graphics.getShader()
+	love_graphics.setShader()
 
-	local blendmode, alphablendmode = graphics_getBlendMode()
-	graphics_setBlendMode("alpha")
+	local blendmode, alphablendmode = love_graphics.getBlendMode()
+	love_graphics.setBlendMode("alpha")
 
-	local rm, gm, bm, am = graphics_getColorMask()
-	graphics_setColorMask(true, true, true, true)
+	local rm, gm, bm, am = love_graphics.getColorMask()
+	love_graphics.setColorMask(true, true, true, true)
 
-	local wireframe = graphics_isWireframe()
-	graphics_setWireframe(false)
+	local wireframe = love_graphics.isWireframe()
+	love_graphics.setWireframe(false)
 
-	local r, g, b, a = graphics_getColor()
-	local w, h = graphics_getDimensions()
+	local r, g, b, a = love_graphics.getColor()
+	local w, h = love_graphics.getDimensions()
 
 	if active then
 		-- Prompt and Environment is opened
@@ -1058,7 +1049,7 @@ function debugger.draw()
 		if vartype == "table" or (indexFunctions and vartype == "function") then
 			-- Indexable
 			local order = index
-			for i,v in ipairs(order) do
+			for i=1, #order do
 				if i >= yScroll and i <= maxLines + yScroll - 4 then
 					local k = order[i]
 					local v = varprint[k]
@@ -1117,93 +1108,93 @@ function debugger.draw()
 		if debugger.useTitleBar then
 			header = "\t"..path.."\n\tType: "..vartype
 		else
-			header = "\t"..path.."\n\tType: "..vartype.." ~"..floor(ram+0.5).." KB "..dep.getFPS().." FPS"
+			header = "\t"..path.."\n\tType: "..vartype.." ~"..floor(ram+0.5).." KB "..love_timer.getFPS().." FPS"
 		end
 		local hprinted = count(stringType, "\n")*fheight
 
 		-- Printed text and Prompt
-		graphics_setColor(color.bgActive)
-		graphics_rectangle("fill", 0, 0, tt-1, hlg)
-		graphics_rectangle("fill", 0, ceil(h-fheight), w, fheight)
+		love_graphics.setColor(color.bgActive)
+		love_graphics.rectangle("fill", 0, 0, tt-1, hlg)
+		love_graphics.rectangle("fill", 0, ceil(h-fheight), w, fheight)
 
-		graphics_setColor(color.fgActive)
+		love_graphics.setColor(color.fgActive)
 		if debugger.printArea > 0 then
-			graphics_setScissor(0, 0, tt-1, hlg)
-			graphics_printf(lg, 0, 0, tt, "left")
-			graphics_setScissor()
+			love_graphics.setScissor(0, 0, tt-1, hlg)
+			love_graphics.printf(lg, 0, 0, tt, "left")
+			love_graphics.setScissor()
 		end
 
 		pcall(promtPrint, w, h, fheight)
 
 		-- Environment Display
 		if debugger.printArea < 1 then
-			graphics_setScissor(tt, 0, w-tt, ceil(h-fheight-1))
+			love_graphics.setScissor(tt, 0, w-tt, ceil(h-fheight-1))
 
-			graphics_setColor(color.bgActive)
-			graphics_rectangle("fill", tt, 0, w-tt, hprinted+fheight*2)
+			love_graphics.setColor(color.bgActive)
+			love_graphics.rectangle("fill", tt, 0, w-tt, hprinted+fheight*2)
 
-			graphics_setColor(color.fgActive)
+			love_graphics.setColor(color.fgActive)
 			local wt = font:getWrap(stringType, (w-tt)/2)
 			local wt2 = font:getWrap(stringName, (w-tt)/2-wt)
-			graphics_print(stringType, tt, fheight*2)
-			graphics_print(stringData, tt+wt+wt2, fheight*2)
-			graphics_setColor(color.fgActive2)
-			graphics_printf(header, tt, 0, w-tt, "justify")
-			graphics_print(stringName, tt+wt, fheight*2)
+			love_graphics.print(stringType, tt, fheight*2)
+			love_graphics.print(stringData, tt+wt+wt2, fheight*2)
+			love_graphics.setColor(color.fgActive2)
+			love_graphics.printf(header, tt, 0, w-tt, "justify")
+			love_graphics.print(stringName, tt+wt, fheight*2)
 		end
 	elseif debugger.doTempPrint then
 		-- Printing the print calls
-		local updateDif = dep.getTime() - updateTime
+		local updateDif = love_timer.getTime() - updateTime
 		local tt = ceil(w*debugger.printArea)-1
 
 		local _, wrap = font:getWrap(lgtemp, tt)
 		local hlg = #wrap*fheight
 		local tw, wrap, infoText
 
-		graphics_setColor(color.bgNotActive)
-		graphics_rectangle("fill", 0, 0, tt, hlg)
+		love_graphics.setColor(color.bgNotActive)
+		love_graphics.rectangle("fill", 0, 0, tt, hlg)
 		if not debugger.useTitleBar then
-			infoText = infoBox(dep.getFPS(), ram, updateDif)
+			infoText = infoBox(love_timer.getFPS(), ram, updateDif)
 			tw, wrap = font:getWrap(infoText, w)
-			graphics_rectangle("fill", w-tw, 0, tw, #wrap*fheight)
+			love_graphics.rectangle("fill", w-tw, 0, tw, #wrap*fheight)
 		end
 
-		graphics_setColor(color.fgNotActive)
+		love_graphics.setColor(color.fgNotActive)
 		if debugger.printArea > 0 then
-			graphics_printf(lgtemp, 0, 0, tt, "left")
+			love_graphics.printf(lgtemp, 0, 0, tt, "left")
 		end
 		if not debugger.useTitleBar then
-			graphics_printf(infoText, w-tw, 0, tw, "right")
+			love_graphics.printf(infoText, w-tw, 0, tw, "right")
 		end
 	elseif not debugger.useTitleBar then
 		-- Not printing the print calls
-		local updateDif = dep.getTime() - updateTime
-		local infoText = infoBox(dep.getFPS(), ram, updateDif)
+		local updateDif = love_timer.getTime() - updateTime
+		local infoText = infoBox(love_timer.getFPS(), ram, updateDif)
 		local tw, wrap = font:getWrap(infoText, w)
 
-		graphics_setColor(color.bgNotActive)
-		graphics_rectangle("fill", w-tw, 0, tw, #wrap*fheight)
+		love_graphics.setColor(color.bgNotActive)
+		love_graphics.rectangle("fill", w-tw, 0, tw, #wrap*fheight)
 
-		graphics_setColor(color.fgNotActive)
-		graphics_printf(infoText, w-tw, 0, tw, "right")
+		love_graphics.setColor(color.fgNotActive)
+		love_graphics.printf(infoText, w-tw, 0, tw, "right")
 	end
 
 	if debugger.useTitleBar then
-		dep.setTitle(infoTitle(dep.getRegularTitle(), dep.getFPS(), ram, dep.getTime()-updateTime))
-	elseif dep.titleUpdated then
-		dep.setTitle(dep.getRegularTitle())
-		dep.titleUpdated = false
+		titleManager.setTitle(infoTitle(titleManager.getRegularTitle(), love_timer.getFPS(), ram, love_timer.getTime()-updateTime))
+	elseif titleManager.titleUpdated then
+		titleManager.setTitle(titleManager.getRegularTitle())
+		titleManager.titleUpdated = false
 	end
 
 	-- Returning the graphics state
-	graphics_pop()
-	graphics_setFont(oldfont)
-	graphics_setScissor(xs, ys, ws, hs)
-	graphics_setColor(r, g, b, a)
-	graphics_setShader(oldshader)
-	graphics_setBlendMode(blendmode, alphablendmode)
-	graphics_getColorMask(rm, gm, bm, am)
-	graphics_setWireframe(wireframe)
+	love_graphics.pop()
+	love_graphics.setFont(oldfont)
+	love_graphics.setScissor(xs, ys, ws, hs)
+	love_graphics.setColor(r, g, b, a)
+	love_graphics.setShader(oldshader)
+	love_graphics.setBlendMode(blendmode, alphablendmode)
+	love_graphics.getColorMask(rm, gm, bm, am)
+	love_graphics.setWireframe(wireframe)
 end
 
 function debugger.isActive()
@@ -1271,14 +1262,14 @@ function debugger.allowFunctionIndex(desc)
 			if k == "___allupvalues" then
 				local t = ret[f]
 				local _
-				for k,v in pairs(fup) do _, t[k] = getupvalue(f, v) end
+				for k,v in next, fup do _, t[k] = getupvalue(f, v) end
 				return t
 			elseif k == "___allupvaluenames" then
 				if retn[f] then
 					return retn[f]
 				else
 					local t = {}
-					for k,v in pairs(fup) do t[k] = true end
+					for k,v in next, fup do t[k] = true end
 					retn[f] = t
 					return t
 				end
@@ -1332,16 +1323,18 @@ function debugger.allowFunctionIndex(desc)
 		local hardnames = {
 			[realPrint] = "print"
 		}
+
 		local indexed = {
 			[_G] = true,
 			[package.loaded] = true
 		}
+
 		local function addName(item, path)
 			if not hardnames[item] then
 				if type(item) == "table" then
 					if not indexed[item] then
 						indexed[item] = true
-						for k,v in pairs(item) do
+						for k,v in next, item do
 							addName(v, path.."."..k)
 						end
 					end
@@ -1352,7 +1345,8 @@ function debugger.allowFunctionIndex(desc)
 				end
 			end
 		end
-		for i,v in ipairs{
+
+		for i,v in ipairs {
 			"assert", "collectgarbage", "dofile", "error", "gcinfo", "getfenv", "getmetatable", "ipairs", "load", "loadfile", "loadstring",
 			"module", "newproxy", "next", "pairs", "pcall", "rawequal", "rawget", "rawset", "require", "select",
 			"setfenv", "setmetatable", "type", "tonumber", "tostring", "unpack", "xpcall",
@@ -1360,6 +1354,7 @@ function debugger.allowFunctionIndex(desc)
 		} do
 			addName(_G[v], v)
 		end
+
 		addName(debugger, "debugger")
 
 		local names = setmetatable({}, {
@@ -1551,7 +1546,10 @@ function debugger.varDisplay(...)
 		local varList = ""
 		local varFunc = {}
 		local args = {...}
-		for i,v in ipairs(args) do
+
+		for i=1, #args do
+			local v = args[i]
+
 			infoTitleFormat = infoTitleFormat .. " [" .. v[1] .. "]"
 			infoBoxFormat = infoBoxFormat .. "\n" .. v[1]
 			varList = varList .. "v" .. tostring(i) .. (i < #args and "," or "")
@@ -1654,7 +1652,7 @@ function debugger.setProfiler(profileLib, reportPath)
 	profileLib.hookall("Lua")
 
 	local function unhook(table)
-		for k,v in pairs(table) do
+		for k,v in next, table do
 			if type(v) == "function" then
 				profileLib.unhook(v)
 			end
@@ -1666,7 +1664,7 @@ function debugger.setProfiler(profileLib, reportPath)
 	unhook(overCallback)
 	unhook(fakeKeyboard)
 	unhook(fakeMouse)
-	unhook(dep)
+	unhook(titleManager)
 	unhook {
 		tostring,
 		count,
@@ -1757,7 +1755,7 @@ debugger.newCommand("loc", "", function() return ":Currently at "..gsub(display,
 
 debugger.newCommand("help", "", function()
 	local all = {}
-	for k,v in pairs(commands) do
+	for k,v in next, commands do
 		if k == v.name then
 			all[#all+1] = "\t"..k
 		end
@@ -1776,7 +1774,9 @@ debugger.newCommand("help", "s", function(s)
 			n = "<number>",
 			b = "<boolean>"
 		}
-		for i,v in ipairs(cmd) do
+
+		for i=1, #cmd do
+			local v = cmd[i]
 			if v.args == "" then
 				all[#all+1] = "\t/"..name
 			else
@@ -1784,6 +1784,7 @@ debugger.newCommand("help", "s", function(s)
 				all[#all+1] = "\t/"..name.." "..gsub(sub(x, 2, #x-1), ".", replace)
 			end
 		end
+
 		sort(all)
 		insert(all, 1, "[[ Help for '"..name.."' ]]\nSyntax:")
 		if #cmd.alias > 0 then
@@ -1792,6 +1793,7 @@ debugger.newCommand("help", "s", function(s)
 				insert(all, "\t/"..cmd.alias[i].." ...")
 			end
 		end
+
 		return concat(all, "\n")
 	elseif s == "me" then
 		return ":You might need professional help if you ask a debugging tool..."
