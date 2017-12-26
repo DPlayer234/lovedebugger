@@ -1506,12 +1506,39 @@ function debugger.viewLocals(src, inLine, var, key)
 	end
 end
 
-function debugger.getStack(stack)
-	assert(stack == nil or type(stack) == "number", "Argument #1 to debugger.getStack(stack) must be a number or nil.")
+function debugger.getStack(a, b)
+	local thread, stack
+	if a ~= nil then
+		if type(a) == "thread" then
+			-- Coroutine
+			thread, stack = a, b
+		else
+			stack = a
+		end
+	end
 
-	stack = (stack or 1) + 1
-	local getinfo = debug.getinfo
-	local getlocal = debug.getlocal
+	assert(stack == nil or type(stack) == "number", "Argument #1 to debugger.getStack([thread], stack) must be a number or nil.")
+
+	local getinfo, getlocal
+	if thread then
+		stack = stack or 0
+
+		local _getinfo = debug.getinfo
+		local _getlocal = debug.getlocal
+
+		getinfo = function(depth, what)
+			return _getinfo(thread, depth, what)
+		end
+
+		getlocal = function(depth, index)
+			return _getlocal(thread, depth, index)
+		end
+	else
+		stack = (stack or 1) + 1
+
+		getinfo = debug.getinfo
+		getlocal = debug.getlocal
+	end
 
 	local var = {}
 
@@ -1526,12 +1553,22 @@ function debugger.getStack(stack)
 		var[i] = this
 
 		local l = 1
-	    while true do
-	      local name, value = getlocal(stack, l)
-	      if not name then break end
-	      this[name] = value
-	      l = l + 1
-	    end
+		while true do
+			local name, value = getlocal(stack, l)
+			if not name then break end
+			if name:find("^%(") then
+				if this[name] == nil then
+					this[name] = value
+				elseif type(this[name]) ~= "table" then
+					this[name] = { this[name] }
+				else
+					this[name][#this[name]+1] = value
+				end
+			else
+				this[name] = value
+			end
+			l = l + 1
+		end
 
 		stack = stack + 1
 		stackInfo = getinfo(stack, "fn")

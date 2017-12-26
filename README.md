@@ -147,11 +147,11 @@ debugger.setActive(active)
 debugger.isActive()
 -- Returns whether the Lua prompt is active
 
-debugger.addUpdate(func, priority)
+debugger.addUpdate(func, [priority])
 -- Adds a function to be called every frame. The function is passed dt (if dt is passed
 -- to debugger.update).
 
-debugger.allowFunctionIndex(nicer_name)
+debugger.allowFunctionIndex([nicer_name])
 -- Enables function indexing, allowing you to browse the upvalues
 -- of functions by Shift-Left-Clicking them in the environment.
 -- The optional argument is whether or not to also give functions
@@ -163,13 +163,13 @@ myFunc2 = function()--[[my function name #2]] ... end
 -- Make sure not to put any spaces between the brackets and the comment
 -- and also to make sure it's a block comment on a single line.
 
-debugger.monitorGlobal(writeTo)
+debugger.monitorGlobal([writeTo])
 -- Enables monitoring the global environment for unusual changes or activities
 -- (by which I mean, new definitions, accessing unused variables etc.).
 -- 'writeto' is the file path (within the Löve save directory) to write the output to.
 -- Defaults to '_G (log).txt'.
 
-debugger.viewLocals(source, inLine, var, key)
+debugger.viewLocals(source, inLine, [var, key])
 -- Used debug.sethook to write the locals given to a table.
 -- 'source' has to be either a relative file-name or a function in the same file.
 -- 'inLine' is the line number, at which to pick out the variables from.
@@ -180,12 +180,13 @@ debugger.viewLocals(source, inLine, var, key)
 -- Calling it without any arguments will reset it. Calling it while running will override the
 -- existing routine.
 
-debugger.getStack(stack_level)
+debugger.getStack([thread], stack_level)
 -- Returns a table containing with each level of the current stack as its own table.
 -- Each of the stack-tables contains all local variables at that point as well as all a
 -- reference to the running function and whatever debug.getinfo gives out as a name.
 -- stack_level is the stack level to start looking at.
 -- stack_level = 1 >> Start at the function calling debugger.getStack
+-- If you supply a thread (coroutine) first, it will instead get the information of that.
 
 debugger.varDisplay(...)
 -- Will display all given variables dynamically where FPS, Lua RAM etc. are displayed.
@@ -198,7 +199,7 @@ debugger.aliasCommand(name, alias)
 -- existing commands via the alias's title, create an alias with the name of another alias
 -- or command or create a new command with the name of an alias.
 
-debugger.errhand(error_message, stack_level)
+debugger.errhand(error_message, [stack_level])
 -- Override love.errhand with this function to use the debugger when the game crashes.
 -- It will write the traceback and entire stack (via debugger.getStack) to the global variables
 -- _stackTraceback and _stackLocals respectively.
