@@ -352,31 +352,41 @@ function debugger.setOverrides(cb)
 	local dummy = {}
 	local allDummy = setmetatable({}, {__mode="kv"})
 
-	local function setDummy(event, OVER_CALLBACK, ORIG_CALLBACK)
-		local DUMMY_CALLBACK
-		if event == "keypressed" then
-			DUMMY_CALLBACK = function(key, scancode, isrepeat)
-				if key == debugger.activate then
-					debugger.setActive(not active)
-				end
-				if active then
-					return OVER_CALLBACK(key, scancode, isrepeat)
-				else
-					if key == debugger.clearPrompt then
-						debugger.doTempPrint = not debugger.doTempPrint
-					end
-					return ORIG_CALLBACK(key, scancode, isrepeat)
-				end
-			end
-		else
-			DUMMY_CALLBACK = function(...)
-				if active then
-					return OVER_CALLBACK(...)
-				else
-					return ORIG_CALLBACK(...)
-				end
-			end
+	local dummyKeyPressed = function(self, key, scancode, isrepeat)
+		if key == debugger.activate then
+			debugger.setActive(not active)
 		end
+		if active then
+			return self.OVER_CALLBACK(key, scancode, isrepeat)
+		else
+			if key == debugger.clearPrompt then
+				debugger.doTempPrint = not debugger.doTempPrint
+			end
+			return self.ORIG_CALLBACK(key, scancode, isrepeat)
+		end
+	end
+
+	local dummyAnyOtherEvent = function(self, ...)
+		if active then
+			return self.OVER_CALLBACK(...)
+		else
+			return self.ORIG_CALLBACK(...)
+		end
+	end
+
+	local function setDummy(event, OVER_CALLBACK, ORIG_CALLBACK)
+		local DUMMY_CALLBACK = setmetatable({
+			OVER_CALLBACK = OVER_CALLBACK,
+			ORIG_CALLBACK = ORIG_CALLBACK
+		}, {
+			__call = event == "keypressed" and dummyKeyPressed or dummyAnyOtherEvent,
+			__index = function(self, k)
+				return ORIG_CALLBACK[k]
+			end,
+			__newindex = function(self, k, v)
+				ORIG_CALLBACK[k] = v
+			end
+		})
 
 		dummy[event] = DUMMY_CALLBACK
 		allDummy[DUMMY_CALLBACK] = ORIG_CALLBACK
