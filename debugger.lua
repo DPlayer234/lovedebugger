@@ -8,16 +8,16 @@ as published by Sam Hocevar. See the COPYING file for more details.
 local debugger = {}
 local profile
 
-debugger.activate    = "f4" -- Löve KeyConstant of the key used to open the console. (Default: 'f4')
-debugger.clearPrompt = "f5" -- Löve KeyConstant of the key used to clear the Lua prompt and toggle 'debugger.doTempPrint'. (Default: 'f5')
-debugger.textfade    = 7    -- Time it takes for text to fade away after its 'print' call in seconds.
-debugger.printArea   = 2/3  -- Screen Area where the prints are displayed (ratio 0.0-1.0). (Default: 2/3)
-debugger.doTempPrint = true -- Whether or not to print to the screen if the console is closed.
-debugger.maxStorage  = 100  -- How many console inputs are stored to be reused (by using 'Up' and 'Down' arrow keys). (Default: 100)
-debugger.useTitleBar = true -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar. (Default: true)
-debugger.replaceTabs ="    "-- Replace tab character in prints with the specified string.
+debugger.activate     = "f4"   -- Löve KeyConstant of the key used to open the console. (Default: 'f4')
+debugger.clearPrompt  = "f5"   -- Löve KeyConstant of the key used to clear the Lua prompt and toggle 'debugger.doTempPrint'. (Default: 'f5')
+debugger.textfade     = 7      -- Time it takes for text to fade away after its 'print' call in seconds.
+debugger.printArea    = 2/3    -- Screen Area where the prints are displayed (ratio 0.0-1.0). (Default: 2/3)
+debugger.doTempPrint  = true   -- Whether or not to print to the screen if the console is closed.
+debugger.maxStorage   = 100    -- How many console inputs are stored to be reused (by using 'Up' and 'Down' arrow keys). (Default: 100)
+debugger.useTitleBar  = true   -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar. (Default: true)
+debugger.replaceTabs  = "    " -- Replace tab character in prints with the specified string.
 
-debugger.color = {          -- Various colors used
+debugger.color = {             -- Various colors used
 	-- Active:
 	bgActive = {  0,  0,  0,127},
 	fgActive = {255,255,255,255},
@@ -273,7 +273,7 @@ local commands = {}
 -- Storing origCallback callbacks/overriding them to be used
 local realKeyboard, realMouse, fakeKeyboard, fakeMouse
 
-local overCallback = {
+debugger.callbacks = {
 	keypressed = function(key, scancode, isrepeat)
 		inputs[key] = true
 		if key == "backspace" then
@@ -317,188 +317,31 @@ local overCallback = {
 		end
 	end
 }
-local origCallback = {}
-local origCallbackMeta
-local callbacks
--- Sets the callback override structure. This should now allow for safe monkey-patching of existing
--- callbacks and setting those same back... Might have weird results if you copy callbacks to other
--- ones.
-function debugger.setOverrides(cb)
-	assert(type(cb) == "table", "Argument #1 to debugger.setOverrides(cb) must be a table.")
 
-	if callbacks ~= nil then
-		if origCallbackMeta then
-			-- Restore original values to callback metatable
-			local meta = getmetatable(callbacks)
+-- Registers the handlers to the default love.handlers
+function debugger.registerHandlers()
+	for event, debuggerFunc in pairs(debugger.callbacks) do
+		local loveHandler = love.handlers[event]
 
-			meta.__newindex = origCallbackMeta.__newindex
-			meta.__index = origCallbackMeta.__index
-
-			origCallbackMeta = nil
-		else
-			-- Remove callback metatable
-			setmetatable(callbacks, nil)
-		end
-
-		for k,v in pairs(origCallback) do
-			callbacks[k] = v
-		end
-	end
-
-	callbacks = cb
-
-	local emptyFunction = function() end
-
-	local dummy = {}
-	local allDummy = setmetatable({}, {__mode="kv"})
-
-	local dummyKeyPressed = function(self, key, scancode, isrepeat)
-		if key == debugger.activate then
-			debugger.setActive(not active)
-		end
-		if active then
-			return self.OVER_CALLBACK(key, scancode, isrepeat)
-		else
-			if key == debugger.clearPrompt then
-				debugger.doTempPrint = not debugger.doTempPrint
-			end
-			return self.ORIG_CALLBACK(key, scancode, isrepeat)
-		end
-	end
-
-	local dummyAnyOtherEvent = function(self, ...)
-		if active then
-			return self.OVER_CALLBACK(...)
-		else
-			return self.ORIG_CALLBACK(...)
-		end
-	end
-
-	local function setDummy(event, OVER_CALLBACK, ORIG_CALLBACK)
-		local DUMMY_CALLBACK = setmetatable({
-			OVER_CALLBACK = OVER_CALLBACK,
-			ORIG_CALLBACK = ORIG_CALLBACK
-		}, {
-			__call = event == "keypressed" and dummyKeyPressed or dummyAnyOtherEvent,
-			__index = function(self, k)
-				return ORIG_CALLBACK[k]
-			end,
-			__newindex = function(self, k, v)
-				ORIG_CALLBACK[k] = v
-			end
-		})
-
-		dummy[event] = DUMMY_CALLBACK
-		allDummy[DUMMY_CALLBACK] = ORIG_CALLBACK
-	end
-
-	for k,v in pairs(overCallback) do
-		origCallback[k] = callbacks[k] or emptyFunction
-
-		setDummy(k, overCallback[k], origCallback[k])
-
-		callbacks[k] = nil
-	end
-
-	local getupvalue, setupvalue = debug.getupvalue, debug.setupvalue
-
-	local checked
-	local function replaceAllInstances(where, what, with)
-		if not checked[where] then
-			checked[where] = true
-
-			if type(where) == "function" then
-				local i = 0
-				local n, v
-				repeat
-					i = i + 1
-					n, v = getupvalue(where, i)
-					if v == what then
-						setupvalue(where, i, with)
-					elseif type(v) == "function" or type(v) == "table" then
-						replaceAllInstances(v, what, with)
-					end
-				until not n
-			else
-				for k,v in next, where do
-					if v == what then
-						rawset(where, k, with)
-					elseif type(v) == "function" or type(v) == "table" then
-						replaceAllInstances(v, what, with)
-					end
+		if event == "keypressed" then
+			love.handlers[event] = function(...)
+				if ... == debugger.activate then
+					debugger.setActive(not active)
 				end
-
-				local meta = getmetatable(where)
-				if meta then
-					replaceAllInstances(meta, what, with)
-				end
-			end
-		end
-	end
-
-	-- New callback meta functions
-	local setvalue = rawset
-	local __newindex = function(self, k, v)
-		if origCallback[k] then
-			if allDummy[v] then
-				v = allDummy[v]
-			else
-				checked = {}
-				replaceAllInstances(v, dummy[k], origCallback[k])
-			end
-
-			rawset(origCallback, k, v)
-			setDummy(k, overCallback[k], v)
-		else
-			return setvalue(self, k, v)
-		end
-	end
-	local __index = dummy
-
-	local cbMeta = getmetatable(callbacks)
-	if cbMeta then
-		-- Already has metatable
-		origCallbackMeta = {
-			__newindex = cbMeta.__newindex,
-			__index = cbMeta.__index
-		}
-
-		-- Make __newindex work correctly
-		if cbMeta.__newindex then
-			setvalue = cbMeta.__newindex
-		end
-		cbMeta.__newindex = __newindex
-
-		-- Make __index work correctly
-		if cbMeta.__index then
-			if type(cbMeta.__index) == "function" then
-				cbMeta.__index = function(t, k)
-					local v = rawget(__index, k)
-					if v ~= nil then
-						return v
-					else
-						return origCallbackMeta.__index(t, k)
+				if active then
+					return debuggerFunc(...)
+				else
+					if ... == debugger.clearPrompt then
+						debugger.doTempPrint = not debugger.doTempPrint
 					end
-				end
-			else
-				cbMeta.__index = function(t, k)
-					local v = rawget(__index, k)
-					if v ~= nil then
-						return v
-					else
-						return origCallbackMeta.__index[k]
-					end
+					return loveHandler(...)
 				end
 			end
 		else
-			cbMeta.__index = __index
+			love.handlers[event] = function(...)
+				return (active and debuggerFunc or loveHandler)(...)
+			end
 		end
-	else
-		-- No metatable, set own
-		setmetatable(callbacks, {
-			__newindex = __newindex,
-			__index = __index
-		})
 	end
 end
 
@@ -1708,7 +1551,7 @@ function debugger.setProfiler(profileLib, reportPath)
 
 	-- Unhook debugger functions
 	unhook(debugger)
-	unhook(overCallback)
+	unhook(debugger.callbacks)
 	unhook(fakeKeyboard)
 	unhook(fakeMouse)
 	unhook(titleManager)
@@ -1854,24 +1697,18 @@ debugger["1 - the variables or"] = true -- !!!
 debugger["2 - it may break!"]    = true -- !!!
 
 setmetatable(debugger, {
-	__call = function(self, other, cb)
+	__call = function(self)
 		-- Auto-Injection
-		if other == nil then other = love end
-		if cb == nil then cb = other end
+		self.registerHandlers()
 
-		assert(type(other) == "table", "Argument #1 to debugger(other, cb) must be a table or nil!")
-		assert(type(other) == "table", "Argument #2 to debugger(other, cb) must be a table or nil!")
-
-		self.setOverrides(cb)
-
-		local __update = other.update
-		local __draw = other.draw
+		local __update = love.update
+		local __draw = love.draw
 
 		loadstring([[
-			local self, other, __update, __draw, lgraphics, pcall, realPrint = ...
+			local self, love, __update, __draw, lgraphics, pcall, realPrint = ...
 
 			if __update then
-				function other.update(...)
+				function love.update(...)
 					local s, r = pcall(self.update, ...)
 					if not s then
 						realPrint(r)
@@ -1880,7 +1717,7 @@ setmetatable(debugger, {
 					__update(...)
 				end
 			else
-				function other.update(...)
+				function love.update(...)
 					local s, r = pcall(self.update, ...)
 					if not s then
 						realPrint(r)
@@ -1889,7 +1726,7 @@ setmetatable(debugger, {
 			end
 
 			if __draw then
-				function other.draw(...)
+				function love.draw(...)
 					__draw(...)
 
 					local s, r = pcall(self.draw)
@@ -1899,7 +1736,7 @@ setmetatable(debugger, {
 					end
 				end
 			else
-				function other.draw(...)
+				function love.draw(...)
 					local s, r = pcall(self.draw)
 					if not s then
 						lgraphics.pop()
@@ -1907,7 +1744,7 @@ setmetatable(debugger, {
 					end
 				end
 			end
-		]], "run_injection")(self, other, __update, __draw, lgraphics, pcall, realPrint)
+		]], "run_injection")(self, love, __update, __draw, lgraphics, pcall, realPrint)
 
 		return self
 	end

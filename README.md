@@ -8,7 +8,7 @@ Download the 'debugger.lua' file (or 'debugger_t.lua' which is trimmed of whites
 
 ### Usage
 
-Simply requiring and calling the module once after setting up *love.update*, *love.draw* and any callbacks you need should suffice for most cases.
+Simply requiring and calling the module once after setting up at least *love.update*, *love.draw* should suffice for most cases.
 
 ```lua
 -- Load and initialize the debugger
@@ -24,9 +24,8 @@ local debugger
 
 function love.load(arg)
 	debugger = require "debugger"
-	debugger.setOverrides(love)
-	-- You cannot easily circumvent letting the debugger monkey-patch
-	-- some callbacks. Sorry. :/
+	debugger.registerHandlers()
+	-- This will monkey-patch relevant love.handlers.
 end
 
 function love.update(dt)
@@ -115,13 +114,6 @@ You can also use the arrow keys (up and down) to bring back previous inputs to t
 ---
 
 ## Additional Functions
-
-By default, the module will assume that callbacks and the update and draw functions are stored in the 'love' table. If you decided to change it up, you may also do this:
-
-```lua
--- Both arguments are tables holding information
-local debugger = require "debugger" (update_and_draw_here, callbacks_here)
-```
 
 Then there's also a few additional debugger functions you may access if required.
 
