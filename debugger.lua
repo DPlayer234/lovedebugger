@@ -482,7 +482,7 @@ function debugger.update(dt)
 			local cbt = love.system.getClipboardText()
 			if type(cbt) == "string" then
 				for p,c in utf8_codes(cbt) do
-					overCallback.textinput(utf8_char(c))
+					debugger.callbacks.textinput(utf8_char(c))
 				end
 			end
 		elseif (((inputs.lctrl or inputs.rctrl) and realKeyboard.isDown("c")) or (realKeyboard.isDown("lctrl", "rctrl") and inputs.c)) and love.system then
@@ -688,13 +688,13 @@ function debugger.update(dt)
 						else
 							-- Copying the variable name to the prompt
 							for p,c in utf8_codes(gsub(ndisplay, fromPattern, nicerPush)) do
-								overCallback.textinput(utf8_char(c))
+								debugger.callbacks.textinput(utf8_char(c))
 							end
 						end
 					else
 						-- Copying the variable name to the prompt
 						for p,c in utf8_codes(gsub(display, fromPattern, nicerPush)) do
-							overCallback.textinput(utf8_char(c))
+							debugger.callbacks.textinput(utf8_char(c))
 						end
 					end
 				else
