@@ -58,16 +58,55 @@ local floor, ceil, abs = math.floor, math.ceil, math.abs
 local sub, gsub, gmatch, format, find = string.sub, string.gsub, string.gmatch, string.format, string.find
 local utf8_len, utf8_codes, utf8_char, utf8_offset = utf8.len, utf8.codes, utf8.char, utf8.offset
 
+-- Fake nil value inserted where nil is needed.
+local fakeNil
+do
+	local fakeNilMeta = {
+		__tostring = function() return "nil" end,
+		type = function() return "*nil" end
+	}
+	fakeNilMeta.__index = fakeNilMeta
+	fakeNil = setmetatable({}, fakeNilMeta)
+end
+
 local type = type
 local pcall = pcall
 local loadstring = loadstring or load
 local pairs, next, ipairs = pairs, next, ipairs
 local _tostring, tonumber = tostring, tonumber
+local error = error
 local tostring = function(t)
 	local s, r = pcall(_tostring, t)
 	return s and r or ":ERROR:"
 end
-local error = error
+
+-- Safely gets a value without calling anything
+local function safeIndex(table, key)
+	local mt = getmetatable(table)
+	if mt == nil then -- No metatable
+		if type(table) ~= "table" then return end -- Not a table
+		return table[key] -- Return value
+	end
+	local index = rawget(mt, "__index")
+	if type(index) == "table" then return safeIndex(index, key) end -- Get field from __index
+	if type(table) == "table" then return rawget(table, key) end -- Get field from original table
+end
+
+-- Used to display alternative type
+local typeReal = function(v)
+	local t = type(v)
+	local tf = safeIndex(v, "type")
+	if tf and tf ~= type then
+		if type(tf) == "string" then return t .. ":" .. tf end
+		local s, r = pcall(tf, v)
+		if s and type(r) == "string" then return t .. ":" .. r end
+	end
+	return t
+end
+
+debugger.fakeNil = fakeNil
+debugger.safeIndex = safeIndex
+debugger.typeReal = typeReal
 
 -- Dependencies, yes, I require those. *BADUM-TSS*
 local titleManager = {}
@@ -87,7 +126,7 @@ if love.window then
 		elseif type(new) == "number" then
 			title = tostring(new)
 		else
-			error("Bad argument #1 to '?' (string expected, got "..type(new)..")", 2)
+			error("Bad argument #1 to '?' (string expected, got "..typeReal(new)..")", 2)
 		end
 		titleManager.titleUpdated = true
 	end
@@ -108,7 +147,7 @@ end
 -- Setting the font
 local font, fheight
 function debugger.setFont(nfont)
-	assert( getmetatable(nfont) and getmetatable(nfont).__index and nfont.type and nfont:type() == "Font", ":Not a font." )
+	assert( typeReal(nfont) == "userdata:Font", ":Not a font." )
 
 	font = nfont
 	fheight = font:getHeight()*font:getLineHeight()
@@ -318,28 +357,33 @@ debugger.callbacks = {
 	end
 }
 
--- Registers the handlers to the default love.handlers
-function debugger.registerHandlers()
-	for event, debuggerFunc in pairs(debugger.callbacks) do
-		local loveHandler = love.handlers[event]
+do
+	local registeredHandlers = false
+	-- Registers the handlers to the default love.handlers
+	function debugger.registerHandlers()
+		if registeredHandlers then return end
+		registeredHandlers = true
+		for event, debuggerFunc in pairs(debugger.callbacks) do
+			local loveHandler = love.handlers[event]
 
-		if event == "keypressed" then
-			love.handlers[event] = function(...)
-				if ... == debugger.activate then
-					debugger.setActive(not active)
-				end
-				if active then
-					return debuggerFunc(...)
-				else
-					if ... == debugger.clearPrompt then
-						debugger.doTempPrint = not debugger.doTempPrint
+			if event == "keypressed" then
+				love.handlers[event] = function(...)
+					if ... == debugger.activate then
+						debugger.setActive(not active)
 					end
-					return loveHandler(...)
+					if active then
+						return debuggerFunc(...)
+					else
+						if ... == debugger.clearPrompt then
+							debugger.doTempPrint = not debugger.doTempPrint
+						end
+						return loveHandler(...)
+					end
 				end
-			end
-		else
-			love.handlers[event] = function(...)
-				return (active and debuggerFunc or loveHandler)(...)
+			else
+				love.handlers[event] = function(...)
+					return (active and debuggerFunc or loveHandler)(...)
+				end
 			end
 		end
 	end
@@ -593,39 +637,23 @@ function debugger.update(dt)
 					if #r > 1 then
 						local max = 0
 						for i,v in next, r do if i > max then max = i end end
-						for i=2, max do r[i-1] = r[i] r[i] = nil end
-						for i=1, max-1 do
+						r[1] = ":Return values"
+						for i=2, max do
 							local v = r[i]
 							if v == nil then
-								r[i] = tostring(i)..":nil"
+								r[i] = "["..tostring(i-1).."] (nil)"
 							else
-								r[i] = tostring(i)..":"..type(v)..":"..tostring(v)
+								r[i] = "["..tostring(i-1).."] ("..typeReal(v)..") "..tostring(v)
 							end
 						end
 						if #r > 0 then
-							printColor(color.yellow, ":"..concat(r, "\t:"))
+							printColor(color.yellow, concat(r, "\n\t"))
 						end
 					end
 				else
 					printColor(color.red, ":ERROR:"..tostring(r[2]))
 				end
 			end
-		end
-
-		-- Scrolling the environment
-		if inputs.mpos then
-			yScroll = yScroll + 4
-		elseif inputs.mneg then
-			if yScroll > 1 then
-				yScroll = yScroll - 4
-			end
-		end
-
-		-- Scrolling the cursor through the text
-		if inputs.right and textPosition <= #texttable then
-			textPosition = textPosition + 1
-		elseif inputs.left and textPosition > 1 then
-			textPosition = textPosition - 1
 		end
 
 		-- Other crap with the environment (mostly navigation)
@@ -746,6 +774,26 @@ function debugger.update(dt)
 					end
 				end
 			end
+		end
+
+		-- Scrolling the environment
+		if inputs.mpos then
+			yScroll = yScroll + 4
+			if yScroll > #index then
+				yScroll = #index
+			end
+		elseif inputs.mneg then
+			yScroll = yScroll - 4
+			if yScroll < 1 then
+				yScroll = 1
+			end
+		end
+
+		-- Scrolling the cursor through the text
+		if inputs.right and textPosition <= #texttable then
+			textPosition = textPosition + 1
+		elseif inputs.left and textPosition > 1 then
+			textPosition = textPosition - 1
 		end
 
 		for k,v in next, inputs do
@@ -907,8 +955,7 @@ function debugger.draw()
 					local k = order[i]
 					local v = varprint[k]
 
-					local t = type(v)
-					addType(t)
+					addType(typeReal(v))
 
 					local name = gsub(tostring(k), reppatt, rep)
 					if checkUtf8(name) then
@@ -918,7 +965,7 @@ function debugger.draw()
 					end
 
 					local data
-					if t == "string" then
+					if type(v) == "string" then
 						data = '"'..gsub(v, reppatt, rep)..'"'
 					else
 						data = gsub(tostring(v), reppatt, rep)
@@ -957,11 +1004,9 @@ function debugger.draw()
 		local stringName = concat(printName, " \n")
 		local stringData = concat(printData, "\n")
 
-		local header
-		if debugger.useTitleBar then
-			header = "\t"..path.."\n\tType: "..vartype
-		else
-			header = "\t"..path.."\n\tType: "..vartype.." ~"..floor(ram+0.5).." KB "..love_timer.getFPS().." FPS"
+		local header = ("\t%s\n\tType: %s %03dy\t"):format(path, typeReal(varprint):gsub(" ", " "), yScroll)
+		if not debugger.useTitleBar then
+			header = header .. " ~"..floor(ram+0.5).." KB "..love_timer.getFPS().." FPS"
 		end
 		local hprinted = count(stringType, "\n")*fheight
 
@@ -981,19 +1026,30 @@ function debugger.draw()
 
 		-- Environment Display
 		if debugger.printArea < 1 then
-			love_graphics.setScissor(tt, 0, w-tt, ceil(h-fheight-1))
+			local wt = w - tt
+			local wh = ceil(h-fheight-1)
+			local tw = ceil(wt * 0.25)
+			local nw = ceil(wt * 0.25)
+
+			love_graphics.setScissor(tt, 0, wt, wh)
 
 			love_graphics.setColor(color.bgActive)
-			love_graphics.rectangle("fill", tt, 0, w-tt, hprinted+fheight*2)
+			love_graphics.rectangle("fill", tt, 0, wt, hprinted+fheight*2)
+
+			love_graphics.setColor(color.fgActive2)
+			love_graphics.printf(header, tt, 0, wt, "justify")
 
 			love_graphics.setColor(color.fgActive)
-			local wt = font:getWrap(stringType, (w-tt)/2)
-			local wt2 = font:getWrap(stringName, (w-tt)/2-wt)
+
+			love_graphics.setScissor(tt, 0, tw, wh)
 			love_graphics.print(stringType, tt, fheight*2)
-			love_graphics.print(stringData, tt+wt+wt2, fheight*2)
+
+			love_graphics.setScissor(tt + tw + nw, 0, wt - tw - nw, wh)
+			love_graphics.print(stringData, tt + tw + nw, fheight*2)
+
+			love_graphics.setScissor(tt + tw, 0, nw, wh)
 			love_graphics.setColor(color.fgActive2)
-			love_graphics.printf(header, tt, 0, w-tt, "justify")
-			love_graphics.print(stringName, tt+wt, fheight*2)
+			love_graphics.print(stringName, tt + tw, fheight*2)
 		end
 	elseif debugger.doTempPrint then
 		-- Printing the print calls
@@ -1288,7 +1344,7 @@ function debugger.monitorGlobal(writeTo)
 	setmetatable(_G, {
 		__newindex = function(t, k, v)
 			if notInDebugger() then
-				local msg = "New global defined: "..tostring(k).."="..tostring(v).." (type "..type(v)..")"
+				local msg = "New global defined: "..tostring(k).."="..tostring(v).." (type "..typeReal(v)..")"
 				printColor(color.blue, msg)
 
 				local tb = traceback(msg, 2)
@@ -1395,12 +1451,16 @@ function debugger.getStack(a, b)
 
 	local var = {}
 
+	local function realvalue(value)
+		return value == nil and fakeNil or value
+	end
+
 	local i=0
 	local stackInfo = getinfo(stack, "fn")
 	while stackInfo do
 		local this = {
-			["(Function:)"] = stackInfo.func,
-			["(Function Name:)"] = stackInfo.name
+			["**Function:"] = stackInfo.func,
+			["**Function Name:"] = stackInfo.name
 		}
 		i = i + 1
 		var[i] = this
@@ -1411,14 +1471,14 @@ function debugger.getStack(a, b)
 			if not name then break end
 			if name:find("^%(") then
 				if this[name] == nil then
-					this[name] = value
+					this[name] = realvalue(value)
 				elseif type(this[name]) ~= "table" then
 					this[name] = { this[name] }
 				else
-					this[name][#this[name]+1] = value
+					this[name][#this[name]+1] = realvalue(value)
 				end
 			else
-				this[name] = value
+				this[name] = realvalue(value)
 			end
 			l = l + 1
 		end
@@ -1705,7 +1765,7 @@ setmetatable(debugger, {
 		local __draw = love.draw
 
 		loadstring([[
-			local self, love, __update, __draw, lgraphics, pcall, realPrint = ...
+			local self, love, __update, __draw, pcall, realPrint = ...
 
 			if __update then
 				function love.update(...)
@@ -1731,7 +1791,7 @@ setmetatable(debugger, {
 
 					local s, r = pcall(self.draw)
 					if not s then
-						lgraphics.pop()
+						love.graphics.pop()
 						realPrint(r)
 					end
 				end
@@ -1739,12 +1799,12 @@ setmetatable(debugger, {
 				function love.draw(...)
 					local s, r = pcall(self.draw)
 					if not s then
-						lgraphics.pop()
+						love.graphics.pop()
 						realPrint(r)
 					end
 				end
 			end
-		]], "run_injection")(self, love, __update, __draw, lgraphics, pcall, realPrint)
+		]], "run_injection")(self, love, __update, __draw, pcall, realPrint)
 
 		return self
 	end
@@ -1769,9 +1829,8 @@ function debugger.errhand(message, stack)
 		debugger.allowFunctionIndex(true)
 	end
 
-	local main, callback = {}, {}
 	local bg = {0, 85, 170}
-	debugger(main, callback)
+	debugger.registerHandlers()
 
 	debugger.setActive(false) debugger.setActive(true)
 
@@ -1783,17 +1842,17 @@ function debugger.errhand(message, stack)
 		for name, a,b,c,d,e,f in event.poll() do
 			if name == "quit" then
 				return a
-			elseif callback[name] then
-				callback[name](a,b,c,d,e,f)
+			elseif debugger.callbacks[name] then
+				debugger.callbacks[name](a,b,c,d,e,f)
 			end
 		end
 		dt = timer.getDelta()
 		timer.step()
 
-		main.update(dt)
+		debugger.update(dt)
 		if graphics.isActive() then
 			graphics.clear(bg)
-			main.draw()
+			debugger.draw()
 			graphics.present()
 		end
 

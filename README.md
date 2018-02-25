@@ -134,6 +134,12 @@ debugger.clear()
 debugger.tempClear()
 -- Only clear the temporary console
 
+debugger.typeReal(value)
+-- Returns the "real" user type of the value
+-- This function is also used internally in the environment display and some other things.
+-- It tries to get a value in the key 'type' of the value. Either returns that if it is
+-- a string or (p)calls it with the value as the only argument and takes its return value.
+
 debugger.setActive(active)
 -- Sets whether or not the Lua prompt is active
 debugger.isActive()
