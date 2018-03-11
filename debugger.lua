@@ -1297,17 +1297,18 @@ function debugger.allowFunctionIndex(desc)
 					end
 				end
 
-				if v then
-					v = "function: "..v.." ("..info.short_src..":"..tostring(linedefined)..")"
-					if hardnames[f] then
-						hardnames[f] = nil
-					end
-				elseif hardnames[f] then
-					v = "function: "..hardnames[f].." (ext)"
+				local shortSrc = info.short_src
+				local location =
+					shortSrc == "[C]" and (" [C]") or
+					(" ("..shortSrc..":"..tostring(linedefined)..")")
+
+				if v or hardnames[f] then
+					v = "function: "..(hardnames[f] or v)..location
+					if hardnames[f] then hardnames[f] = nil end
 				else
 					local __tostring = funcMeta.__tostring
 					funcMeta.__tostring = nil
-					v = tostring(f).." ("..info.short_src..":"..tostring(linedefined)..")"
+					v = tostring(f)..location
 					funcMeta.__tostring = __tostring
 				end
 
