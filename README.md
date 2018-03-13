@@ -204,6 +204,8 @@ debugger.errhand(error_message, [stack_level])
 -- It is very likely to fail if the initial error was a stack overflow, though!
 -- If you want to use this within another error handler, please supply the stack_level in such
 -- a way that the traceback starts at the correct point.
+-- Can also be used as a pseudo-breakpoint by calling in within your code.
+-- To continue, try to close the application in that case.
 ```
 
 There's also a few constants that you may modify as well:

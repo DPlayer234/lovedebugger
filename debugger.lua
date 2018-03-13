@@ -81,14 +81,16 @@ local tostring = function(t)
 end
 
 -- Safely gets a value without calling anything
-local function safeIndex(table, key)
+local function safeIndex(table, key, depth)
+	depth = depth or 0
+	if depth > 5 then return end -- Prevent endlessly looping
 	local mt = getmetatable(table)
 	if mt == nil then -- No metatable
 		if type(table) ~= "table" then return end -- Not a table
 		return table[key] -- Return value
 	end
 	local index = rawget(mt, "__index")
-	if type(index) == "table" then return safeIndex(index, key) end -- Get field from __index
+	if type(index) == "table" then return safeIndex(index, key, depth + 1) end -- Get field from __index
 	if type(table) == "table" then return rawget(table, key) end -- Get field from original table
 end
 
@@ -1811,8 +1813,10 @@ setmetatable(debugger, {
 	end
 })
 
--- If you want to use this as an error-handler
+-- If you want to use the debugger as an error-handler.
 -- Will probably fail if the error was a stack overflow.
+-- Can also be used as a pseudo-breakpoint by calling in within your code:
+-- To continue, try to close the application.
 function debugger.errhand(message, stack)
 	message = message or ""
 	stack = stack or 2
@@ -1821,39 +1825,47 @@ function debugger.errhand(message, stack)
 	local timer = require "love.timer"
 	local event = require "love.event"
 	local graphics = require "love.graphics"
+	local window = require "love.window"
 
+	-- Get traceback message
 	_stackTraceback = debug.traceback(message, stack)
 	printColor(color.red, _stackTraceback)
 
+	-- Get locals on stack
 	_stackLocals = debugger.getStack(stack)
 	if not indexFunctions then
 		debugger.allowFunctionIndex(true)
 	end
 
-	local bg = {0, 85, 170}
-	debugger.registerHandlers()
+	if not window.isOpen() then
+		-- Open a window if there is none
+		local w, h = love.window.getDesktopDimensions()
+		love.window.setMode(w * (2/3), h * (2/3), { resizable = true })
+	end
 
+	local bg = {0, 85, 170}
 	debugger.setActive(false) debugger.setActive(true)
 
 	local dt = 0
 	timer.step()
 
+	-- Loop. Is exited when the 'quit' event is triggered.
 	while true do
 		event.pump()
 		for name, a,b,c,d,e,f in event.poll() do
 			if name == "quit" then
 				return a
 			elseif debugger.callbacks[name] then
-				debugger.callbacks[name](a,b,c,d,e,f)
+				xpcall(debugger.callbacks[name], print, a, b, c, d, e, f)
 			end
 		end
 		dt = timer.getDelta()
 		timer.step()
 
-		debugger.update(dt)
+		xpcall(debugger.update, print, dt)
 		if graphics.isActive() then
 			graphics.clear(bg)
-			debugger.draw()
+			if not xpcall(debugger.draw, print) then love.graphics.pop() end
 			graphics.present()
 		end
 
