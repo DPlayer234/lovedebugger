@@ -1236,24 +1236,21 @@ function debugger.allowFunctionIndex(desc)
 		}
 
 		local indexed = {
-			[_G] = true,
-			[package.loaded] = true
+			[package.loaded] = true,
+			[package.preload] = true
 		}
 
 		local function addName(item, path)
-			if not hardnames[item] then
-				if type(item) == "table" then
-					if not indexed[item] then
-						indexed[item] = true
-						for k,v in next, item do
-							addName(v, path.."."..k)
-						end
-					end
-				elseif type(item) == "function" then
-					hardnames[item] = path
-					amount = amount + 1
-					bytes = bytes + #path
+			if indexed[item] or hardnames[item] then return end
+			if type(item) == "table" then
+				indexed[item] = true
+				for k,v in next, item do
+					addName(v, path.."."..k)
 				end
+			elseif type(item) == "function" then
+				hardnames[item] = path
+				amount = amount + 1
+				bytes = bytes + #path
 			end
 		end
 
