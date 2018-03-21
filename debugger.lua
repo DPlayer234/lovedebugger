@@ -881,32 +881,17 @@ local __infoTitleFormat, __infoBoxFormat = infoTitleFormat, infoBoxFormat
 -- Drawing everything
 function debugger.draw()
 	-- Storing the current graphics state and resetting it
-	love_graphics.push()
+	love_graphics.push("all")
 	love_graphics.origin()
-
-	local ram = collectgarbage("count")
-
-	fheight = abs(font:getHeight()*font:getLineHeight())
-
-	local oldfont = love_graphics.getFont()
 	love_graphics.setFont(font)
-
-	local xs, ys, ws, hs = love_graphics.getScissor()
 	love_graphics.setScissor()
-
-	local oldshader = love_graphics.getShader()
 	love_graphics.setShader()
-
-	local blendmode, alphablendmode = love_graphics.getBlendMode()
 	love_graphics.setBlendMode("alpha")
-
-	local rm, gm, bm, am = love_graphics.getColorMask()
 	love_graphics.setColorMask(true, true, true, true)
-
-	local wireframe = love_graphics.isWireframe()
 	love_graphics.setWireframe(false)
 
-	local r, g, b, a = love_graphics.getColor()
+	local ram = collectgarbage("count")
+	fheight = abs(font:getHeight()*font:getLineHeight())
 	local w, h = love_graphics.getDimensions()
 
 	if active then
@@ -1099,13 +1084,6 @@ function debugger.draw()
 
 	-- Returning the graphics state
 	love_graphics.pop()
-	love_graphics.setFont(oldfont)
-	love_graphics.setScissor(xs, ys, ws, hs)
-	love_graphics.setColor(r, g, b, a)
-	love_graphics.setShader(oldshader)
-	love_graphics.setBlendMode(blendmode, alphablendmode)
-	love_graphics.getColorMask(rm, gm, bm, am)
-	love_graphics.setWireframe(wireframe)
 end
 
 function debugger.isActive()
