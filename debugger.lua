@@ -281,28 +281,22 @@ end
 -- This function will affect the order of the environment display.
 -- You may rewrite this: It should get a table and return an array with the KEYS of the origCallback table as its VALUES.
 -- E.g. sortedTable({ x = 5, y = 2, a = "test" }) -> { "a", "x", "y" }
-local function sortCont(a, b) if type(a) == type(b) then return a<b else return tostring(a)<tostring(b) end end
-local function sortedTable(t, to)
-	local tx
-	if to then
-		for k,v in next, to do to[k] = nil end
-		tx = to
-	else
-		tx = {}
-	end
+local function sortCont(a, b) if type(a) == type(b) then return a < b else return tostring(a) < tostring(b) end end
+local function pSortCont(a, b) local s, r = pcall(sortCont, a, b) return s and r end
 
+local function sortedTable(t)
+	local to = {}
 	for k,v in next, t do
-		tx[#tx+1] = k
+		to[#to+1] = k
 	end
-	pcall(sort, tx, sortCont) -- <= Real Sorting
-	return tx
+	pcall(sort, to, sortCont) -- <= Real Sorting
+	return to
 end
 
 local display = "_G"
 local yScroll = 1
 local textPosition = 1
 local inputs = {}
-local index = {}
 
 local active = false
 local textinput = ""
@@ -310,6 +304,30 @@ local texttable = {}
 local lastselect = 0
 local lastinput = {}
 local commands = {}
+
+local indexFunctions, prettyFunctions = false, false
+
+-- Gets the currently navigated to value
+local function getDv(display)
+	local s, dv = pcall(loadstring("local getmetatable=... return "..display), getmetatable)
+	if s then
+		return dv
+	else
+		return nil
+	end
+end
+
+-- Gets the currently navigated to value and the index if valid
+local function getDvIndex(display)
+	local dv = getDv(display)
+	if type(dv) == "table" then
+		return dv, sortedTable(dv)
+	end
+	if indexFunctions and type(dv) == "function" then
+		return dv, sortedTable(dv.___allupvaluenames)
+	end
+	return dv
+end
 
 -- Storing origCallback callbacks/overriding them to be used
 local realKeyboard, realMouse, fakeKeyboard, fakeMouse
@@ -476,7 +494,6 @@ function debugger.setActive(status)
 	end
 end
 
-local indexFunctions, prettyFunctions = false, false
 local updateEvents = {}
 
 local updateTime = 0
@@ -486,6 +503,7 @@ local nicerPush = function(t) return "."..sub(t, 3, #t-2) end
 function debugger.update(dt)
 	assert(type(dt) == "number", "Argument #1 to debugger.update(dt) must be a number!")
 
+	-- Removing text from the temporary output
 	if #lgtime > 0 then
 		local ctime = love_timer.getTime()
 		if lgtime[1] + debugger.textfade < ctime then
@@ -496,10 +514,12 @@ function debugger.update(dt)
 	end
 
 	if active then
+		-- Clearing the prompt
 		if inputs[debugger.clearPrompt] then
 			texttable = {}
 			textPosition = 1
 		end
+
 		-- Getting previous inputs
 		if inputs.up then
 			if lastselect < #lastinput then
@@ -524,6 +544,7 @@ function debugger.update(dt)
 			end
 		end
 
+		-- Clipboard
 		if (((inputs.lctrl or inputs.rctrl) and realKeyboard.isDown("v")) or (realKeyboard.isDown("lctrl", "rctrl") and inputs.v) or inputs.insert) and love.system then
 			local cbt = love.system.getClipboardText()
 			if type(cbt) == "string" then
@@ -535,8 +556,8 @@ function debugger.update(dt)
 			love.system.setClipboardText(concat(texttable, ""))
 		end
 
+		-- Handling console execution.
 		if inputs["return"] and #texttable > 0 then
-			-- Handling console execution.
 			textinput = concat(texttable, "")
 
 			-- Storing current input to be reused
@@ -659,14 +680,7 @@ function debugger.update(dt)
 		end
 
 		-- Other crap with the environment (mostly navigation)
-		local s, dv = pcall(loadstring("local getmetatable=... return "..display), getmetatable)
-
-		if type(dv) == "table" then
-			index = sortedTable(dv, index)
-		elseif indexFunctions and type(dv) == "function" then
-			index = sortedTable(dv.___allupvaluenames, index)
-		end
-		if not s then dv = nil end
+		local dv, index = getDvIndex(display)
 
 		if (inputs.m1 or inputs.m2) then
 			if love_mouse.getX() >= ceil(love_graphics.getWidth()*debugger.printArea) then
@@ -675,8 +689,9 @@ function debugger.update(dt)
 
 				if nid >= 0 then
 					-- Clicked on a variable
-					local ntext = index[nid+yScroll]
-					if ntext and (type(dv) == "table" or (indexFunctions and type(dv) == "function")) then
+					if index and index[nid+yScroll] then
+						local ntext = index[nid+yScroll]
+
 						-- Getting variable name:
 						local ndisplay = ""
 						local ntype = type(ntext)
@@ -687,13 +702,11 @@ function debugger.update(dt)
 							ndisplay = display.."["..(ntype=="string" and format("%q", ntext) or tostring(ntext)).."]"
 						end
 
-						local s, dv = pcall(loadstring("local getmetatable=... return "..ndisplay), getmetatable)
-						if s and type(dv) == "table" and inputs.m1 then
+						local dv = getDv(ndisplay)
+						if type(dv) == "table" and inputs.m1 then
 							-- LMB
 							-- Navigating to another table
 							display = ndisplay
-							index = sortedTable(dv, index)
-
 							yScroll = 1
 						elseif shift then
 							-- Holding Shift
@@ -704,15 +717,12 @@ function debugger.update(dt)
 
 								if type(m) == "table" then
 									display = "getmetatable("..ndisplay..")"
-									index = sortedTable(m, index)
 									yScroll = 1
 								end
 							elseif indexFunctions and type(dv) == "function" then
 								-- LMB
 								-- Navigating to a function's upvalues
 								display = ndisplay
-								index = sortedTable(dv.___allupvalues, index)
-
 								yScroll = 1
 							end
 						else
@@ -735,42 +745,34 @@ function debugger.update(dt)
 
 						if type(m) == "table" then
 							display = "getmetatable("..display..")"
-							index = sortedTable(m, index)
 							yScroll = 1
 						end
 					else
-						-- Navigating to its parent
-						local s = display
+						repeat
+							-- Navigating to its parent
+							local s = display
 
-						if find(s, "^getmetatable%(.*%)$") then
-							display = sub(s, 14, #s-1)
-						elseif find(s, "%(%)$") then
-							display = sub(s, 1, #s-2)
-						else
-							local e, _e = find(s, "%[")
-							if e then s = sub(s, e+1, #s) end
-							local r = 0
-							while e do
-								r = r + e
-								e, _e = find(s, "%[")
-								if e then s = sub(s, e+1, #s) end
-							end
-
-							if r > 0 then
-								display = sub(display, 1, r-1)
+							if find(s, "^getmetatable%(.*%)$") then
+								display = sub(s, 14, #s-1)
+							elseif find(s, "%(%)$") then
+								display = sub(s, 1, #s-2)
 							else
-								display = "_G"
-							end
-						end
+								local e, _e = find(s, "%[")
+								if e then s = sub(s, e+1, #s) end
+								local r = 0
+								while e do
+									r = r + e
+									e, _e = find(s, "%[")
+									if e then s = sub(s, e+1, #s) end
+								end
 
-						local s, dv = pcall(loadstring("local getmetatable=... return "..display), getmetatable)
-						if s then
-							if type(dv) == "table" then
-								index = sortedTable(dv, index)
-							elseif indexFunctions and type(dv) == "function" then
-								index = sortedTable(dv.___allupvalues, index)
+								if r > 0 then
+									display = sub(display, 1, r-1)
+								else
+									display = "_G"
+								end
 							end
-						end
+						until display == "_G" or select(2, getDvIndex(display))
 
 						yScroll = 1
 					end
@@ -779,12 +781,12 @@ function debugger.update(dt)
 		end
 
 		-- Scrolling the environment
-		if inputs.mpos then
+		if inputs.mpos and index then
 			yScroll = yScroll + 4
 			if yScroll > #index then
 				yScroll = #index
 			end
-		elseif inputs.mneg then
+		elseif inputs.mneg and index then
 			yScroll = yScroll - 4
 			if yScroll < 1 then
 				yScroll = 1
@@ -901,18 +903,10 @@ function debugger.draw()
 		local _, wrap = font:getWrap(lg, tt)
 		local hlg = #wrap*fheight
 
-		local varprint
-		local success, v = pcall(loadstring("local getmetatable=... return "..display), getmetatable)
-		local vartype
-		if success and v then
-			varprint = v
-			vartype = type(varprint)
-			if indexFunctions and vartype == "function" then
-				varprint = v.___allupvalues
-			end
-		else
-			varprint = "Invalid path"
-			vartype = "nil"
+		local dv, index = getDvIndex(display)
+		local vartype = typeReal(dv):gsub(" ", " ")
+		if indexFunctions and vartype == "function" then
+			dv = dv.___allupvalues
 		end
 
 		local printType, indexType = {}, 1
@@ -934,13 +928,12 @@ function debugger.draw()
 
 		local maxLines = ceil(h/fheight)
 
-		if vartype == "table" or (indexFunctions and vartype == "function") then
+		if index then
 			-- Indexable
-			local order = index
-			for i=1, #order do
+			for i=1, #index do
 				if i >= yScroll and i <= maxLines + yScroll - 4 then
-					local k = order[i]
-					local v = varprint[k]
+					local k = index[i]
+					local v = dv[k]
 
 					addType(typeReal(v))
 
@@ -970,7 +963,7 @@ function debugger.draw()
 			addType("\t>>>\n")
 			addName("")
 		else
-			addType(gsub(tostring(varprint), " ", " ").."\n\t>>>\n")
+			addType(gsub(tostring(dv), " ", " ").."\n\t>>>\n")
 		end
 
 		-- Variable Path
@@ -991,7 +984,7 @@ function debugger.draw()
 		local stringName = concat(printName, " \n")
 		local stringData = concat(printData, "\n")
 
-		local header = ("\t%s\n\tType: %s %03dy\t"):format(path, typeReal(varprint):gsub(" ", " "), yScroll)
+		local header = ("\t%s\n\tType: %s %03dy\t"):format(path, vartype, yScroll)
 		if not debugger.useTitleBar then
 			header = header .. " ~"..floor(ram+0.5).." KB "..love_timer.getFPS().." FPS"
 		end
@@ -1597,7 +1590,10 @@ function debugger.setProfiler(profileLib, reportPath)
 		tostring,
 		count,
 		sortCont,
+		pSortCont,
 		sortedTable,
+		getDv,
+		getDvIndex,
 		promtPrint,
 		infoTitle,
 		infoBox,
