@@ -495,8 +495,9 @@ function debugger.setActive(status)
 end
 
 local updateEvents = {}
-
 local updateTime = 0
+local monitorTable
+
 -- Update Function
 local fromPattern = "%[\"[_a-zA-Z][_a-zA-Z0-9]-\"%]"
 local nicerPush = function(t) return "."..sub(t, 3, #t-2) end
@@ -514,6 +515,8 @@ function debugger.update(dt)
 	end
 
 	if active then
+		monitorTable:update()
+
 		-- Clearing the prompt
 		if inputs[debugger.clearPrompt] then
 			texttable = {}
@@ -1083,6 +1086,7 @@ function debugger.isActive()
 	return active
 end
 
+-- Returns whether the scope is outside of the debugger
 local notInDebugger
 do
 	local traceback = debug.traceback
@@ -1097,6 +1101,70 @@ do
 		if find(tb, allowed , 1, true) then return false end
 		return true
 	end
+end
+
+-- The monitor table can be expanded to access variables
+-- Simply add a string containing the path to access.
+do
+	local updateList = {}
+
+	local errorMeta = {
+		__index = {
+			type = "error"
+		},
+		__tostring = function(self)
+			return "error: " .. self.errmsg
+		end
+	}
+
+	monitorTable = setmetatable({}, {
+		__index = {
+			update = function(t)
+				for k, v in pairs(updateList) do
+					local ok, value = pcall(v)
+					if ok then
+						if value == nil then
+							rawset(t, k, fakeNil)
+						else
+							rawset(t, k, value)
+						end
+					else
+						rawset(t, k, setmetatable({ errormsg = value }, errorMeta))
+					end
+				end
+			end,
+			type = "monitor"
+		},
+		__newindex = function(t, k, v)
+			if updateList[k] then
+				updateList[k](v)
+			elseif type(v) == "function" then
+				updateList[k] = v
+			elseif type(v) == "string" then
+				local func =
+					(v:find("%(%)$")) and loadstring("if ... then " .. v:gsub("%(%)$", "") .. "(...) else return (" .. v .. ") end") or
+					loadstring("if ... then " .. v .. " = (...) else return (" .. v .. ") end") or
+					loadstring("return (" .. v .. ")")
+
+				if not func then
+					return error("Cannot convert that to a function.")
+				end
+
+				updateList[k] = func
+			else
+				error("Can only add functions and strings to update list.")
+			end
+		end,
+		__tostring = function(self)
+			return "table: <monitor>"
+		end
+	})
+
+	debugger.monitorTable = monitorTable
+end
+
+function debugger.getMonitorTable()
+	return monitorTable
 end
 
 -- Up-Value-getter
@@ -1813,6 +1881,8 @@ function debugger.errhand(message, stack)
 		local w, h = love.window.getDesktopDimensions()
 		love.window.setMode(w * (2/3), h * (2/3), { resizable = true })
 	end
+
+	graphics.reset()
 
 	local bg = {0, 85, 170}
 	debugger.setActive(false) debugger.setActive(true)
