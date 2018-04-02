@@ -19,19 +19,19 @@ debugger.replaceTabs  = "    " -- Replace tab character in prints with the speci
 
 debugger.color = {             -- Various colors used
 	-- Active:
-	bgActive = {  0,  0,  0,127},
-	fgActive = {255,255,255,255},
-	fgActive2= {200,200,255,255},
+	bgActive = {0.00,0.00,0.00,0.50},
+	fgActive = {1.00,1.00,1.00,1.00},
+	fgActive2= {0.80,0.80,1.00,1.00},
 	-- Not Active:
-	bgNotActive = {  0,  0,  0, 85},
-	fgNotActive = {255,255,255,170},
+	bgNotActive = {0.00,0.00,0.00,0.35},
+	fgNotActive = {1.00,1.00,1.00,0.70},
 	-- Other:
-	white = {255,255,255},
-	black = {  0,  0,  0},
-	red   = {255, 85, 85},
-	blue  = { 85, 85,255},
-	green = { 85,255, 85},
-	yellow= {255,205, 40},
+	white = {1.00,1.00,1.00},
+	black = {0.00,0.00,0.00},
+	red   = {1.00,0.35,0.35},
+	blue  = {0.35,0.35,1.00},
+	green = {0.35,1.00,0.35},
+	yellow= {1.00,0.80,0.15},
 }
 
 -- Call debugger.setFont(Font:Löve-Font-Object) to set the font used by the debugger; default is the font set during initialization.
@@ -1178,7 +1178,10 @@ function debugger.allowFunctionIndex(desc)
 	local getinfo = debug.getinfo
 
 	local filesystem = require("love.filesystem")
-	local isFile = filesystem.isFile
+	local isFile = function(path)
+		local info = filesystem.getInfo(path)
+		return info and info.type == "file"
+	end
 	local lines = filesystem.lines
 
 	local upval = setmetatable({}, {__mode = "kv"})
@@ -1372,8 +1375,11 @@ function debugger.monitorGlobal(writeTo)
 
 	printColor(color.red, "\tNow monitoring the global environment for changes.\nWill be logged to '"..writeTo.."'.")
 
-	if not love.filesystem.isFile(writeTo) then
+	local writeToInfo = love.filesystem.getInfo(writeTo)
+	if not writeToInfo then
 		love.filesystem.write(writeTo, "")
+	elseif writeToInfo.type ~= "file" then
+		error("Can only write log to files.")
 	end
 
 	local file = love.filesystem.newFile(writeTo, "a")
@@ -1574,6 +1580,10 @@ function debugger.setProfiler(profileLib, reportPath)
 		running = false
 	}
 
+	if (love.filesystem.getInfo(reportPath) or { type = "file" }).type ~= "file" then
+		error("Report Path cannot be a file.")
+	end
+
 	local reportFile
 	function _profile.addReport()
 		reportFile:write(profile.lib.report(profile.sort, profile.rows).."\n")
@@ -1586,8 +1596,11 @@ function debugger.setProfiler(profileLib, reportPath)
 			profile.frame = 0
 			profileLib.start()
 
-			if not love.filesystem.isFile(reportPath) then
+			local reportFileInfo = love.filesystem.getInfo(reportPath)
+			if not reportFileInfo then
 				love.filesystem.write(reportPath, "")
+			elseif reportFileInfo.type ~= "file" then
+				error("Report file path cannot be a file.")
 			end
 
 			reportFile = love.filesystem.newFile(reportPath, "a")
@@ -1856,7 +1869,7 @@ setmetatable(debugger, {
 -- Will probably fail if the error was a stack overflow.
 -- Can also be used as a pseudo-breakpoint by calling in within your code:
 -- To continue, try to close the application.
-function debugger.errhand(message, stack)
+function debugger.errorhandler(message, stack)
 	message = message or ""
 	stack = stack or 2
 
@@ -1883,29 +1896,26 @@ function debugger.errhand(message, stack)
 	end
 
 	graphics.reset()
-
-	local bg = {0, 85, 170}
 	debugger.setActive(false) debugger.setActive(true)
 
 	local dt = 0
 	timer.step()
 
 	-- Loop. Is exited when the 'quit' event is triggered.
-	while true do
+	return function()
 		event.pump()
 		for name, a,b,c,d,e,f in event.poll() do
 			if name == "quit" then
-				return a
+				return true, a
 			elseif debugger.callbacks[name] then
 				xpcall(debugger.callbacks[name], print, a, b, c, d, e, f)
 			end
 		end
-		dt = timer.getDelta()
-		timer.step()
+		dt = timer.step()
 
 		xpcall(debugger.update, print, dt)
 		if graphics.isActive() then
-			graphics.clear(bg)
+			graphics.clear(0.00, 0.35, 0.70)
 			if not xpcall(debugger.draw, print) then love.graphics.pop() end
 			graphics.present()
 		end
@@ -1913,5 +1923,8 @@ function debugger.errhand(message, stack)
 		timer.sleep(0.01)
 	end
 end
+
+-- Alias
+debugger.errhand = debugger.errorhandler
 
 return debugger

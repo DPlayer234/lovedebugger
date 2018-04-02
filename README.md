@@ -1,6 +1,6 @@
 # LöveDebugger
 
-(Not so) simple debugging tool for [Löve](https://www.love2d.org/), currently for Löve version 0.10.2 (may work with other versions).
+(Not so) simple debugging tool for [Löve](https://www.love2d.org/), currently for Löve version 11.0 (for older version, please check older releases).
 
 Download the 'debugger.lua' file (or 'debugger_t.lua' which is trimmed of whitespace) and include it in your Lua path or game directory (I suggest against leaving debug code in releases).
 
@@ -197,8 +197,8 @@ debugger.aliasCommand(name, alias)
 -- existing commands via the alias's title, create an alias with the name of another alias
 -- or command or create a new command with the name of an alias.
 
-debugger.errhand(error_message, [stack_level])
--- Override love.errhand with this function to use the debugger when the game crashes.
+debugger.errorhandler(error_message, [stack_level])
+-- Override love.errorhandler with this function to use the debugger when the game crashes.
 -- It will write the traceback and entire stack (via debugger.getStack) to the global variables
 -- _stackTraceback and _stackLocals respectively.
 -- It is very likely to fail if the initial error was a stack overflow, though!
