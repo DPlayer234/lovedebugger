@@ -654,11 +654,13 @@ function debugger.update(dt)
 				end
 			else
 				-- Attempting return to print that on the screen
-				local f = loadstring("local getmetatable=...;return "..textinput, "prompt")
-				if not f then
-					f = loadstring("local getmetatable=...;"..textinput, "prompt")
+				local r = { loadstring("local getmetatable=...;return "..textinput, "prompt") }
+				if not r[1] then
+					r = { loadstring("local getmetatable=...;"..textinput, "prompt") }
 				end
-				local r = { pcall(f, getmetatable) }
+				if r[1] then
+					r = { pcall(r[1], getmetatable) }
+				end
 				if r[1] == true then
 					if #r > 1 then
 						local max = 0
