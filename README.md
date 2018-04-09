@@ -197,6 +197,11 @@ debugger.aliasCommand(name, alias)
 -- existing commands via the alias's title, create an alias with the name of another alias
 -- or command or create a new command with the name of an alias.
 
+debugger.addSource([func])
+-- Adds the source file of a function or the source file this was called in to the debugger
+-- whitelist. Any functions defined within this whitelist may index functions (if enabled)
+-- and will not trigger the global variable monitor (also, if enabled).
+
 debugger.errorhandler(error_message, [stack_level])
 -- Override love.errorhandler with this function to use the debugger when the game crashes.
 -- It will write the traceback and entire stack (via debugger.getStack) to the global variables

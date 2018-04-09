@@ -58,6 +58,9 @@ local floor, ceil, abs = math.floor, math.ceil, math.abs
 local sub, gsub, gmatch, format, find = string.sub, string.gsub, string.gmatch, string.format, string.find
 local utf8_len, utf8_codes, utf8_char, utf8_offset = utf8.len, utf8.codes, utf8.char, utf8.offset
 
+-- This is used for any loadstring that is considered to be within the debugger
+local DEBUGGER_LOADSTRING = "DEBUGGER"
+
 -- Fake nil value inserted where nil is needed.
 local fakeNil
 do
@@ -70,7 +73,7 @@ do
 end
 
 local type = type
-local pcall = pcall
+local pcall, xpcall = pcall, xpcall
 local loadstring = loadstring or load
 local pairs, next, ipairs = pairs, next, ipairs
 local _tostring, tonumber = tostring, tonumber
@@ -309,7 +312,7 @@ local indexFunctions, prettyFunctions = false, false
 
 -- Gets the currently navigated to value
 local function getDv(display)
-	local s, dv = pcall(loadstring("local getmetatable=... return "..display), getmetatable)
+	local s, dv = pcall(loadstring("local getmetatable=... return "..display, DEBUGGER_LOADSTRING), getmetatable)
 	if s then
 		return dv
 	else
@@ -644,19 +647,13 @@ function debugger.update(dt)
 				else
 					printColor(color.red, ":ERROR:Unknown command. Add commands with debugger.newCommand(name, args, function)")
 				end
-			elseif textinput:match("[_a-zA-Z0-9%.%[%]\"']+%s*=[^=].*") == textinput then
-				-- Probably Variable assignment
-				local success, err = pcall(loadstring("local getmetatable=...;"..textinput, "prompt"), getmetatable)
-				if success then
-					printColor(color.yellow, ":Set variable "..textinput)
-				else
-					printColor(color.red, ":ERROR:"..tostring(err))
-				end
 			else
 				-- Attempting return to print that on the screen
-				local r = { loadstring("local getmetatable=...;return "..textinput, "prompt") }
+				printColor(color.yellow, ">> " .. textinput)
+
+				local r = { loadstring("local getmetatable=...;return "..textinput, DEBUGGER_LOADSTRING) }
 				if not r[1] then
-					r = { loadstring("local getmetatable=...;"..textinput, "prompt") }
+					r = { loadstring("local getmetatable=...;"..textinput, DEBUGGER_LOADSTRING) }
 				end
 				if r[1] then
 					r = { pcall(r[1], getmetatable) }
@@ -1091,18 +1088,21 @@ end
 -- Returns whether the scope is outside of the debugger
 local notInDebugger
 do
-	local traceback = debug.traceback
+	local getinfo = debug.getinfo
 
-	local codepath = traceback():match("^stack traceback:%s*(.-):")
-	local allowed = "[string \"prompt\"]:1:"
+	local sources = {
+		[DEBUGGER_LOADSTRING] = true
+	}
 
 	function notInDebugger()
-		local tb = traceback("", 3)
-
-		if find(tb, codepath, 1, true) then return false end
-		if find(tb, allowed , 1, true) then return false end
-		return true
+		return not sources[debug.getinfo(3, "S").source]
 	end
+
+	function debugger.addSource(func)
+		sources[debug.getinfo(func or 2, "S").source] = true
+	end
+
+	debugger.addSource()
 end
 
 -- The monitor table can be expanded to access variables
@@ -1115,7 +1115,7 @@ do
 			type = "error"
 		},
 		__tostring = function(self)
-			return "error: " .. self.errmsg
+			return "error: " .. self.errormsg
 		end
 	}
 
@@ -1138,19 +1138,10 @@ do
 			type = "monitor"
 		},
 		__newindex = function(t, k, v)
-			if updateList[k] then
-				updateList[k](v)
-			elseif type(v) == "function" then
+			if type(v) == "function" then
 				updateList[k] = v
 			elseif type(v) == "string" then
-				local func =
-					(v:find("%(%)$")) and loadstring("if ... then " .. v:gsub("%(%)$", "") .. "(...) else return (" .. v .. ") end") or
-					loadstring("if ... then " .. v .. " = (...) else return (" .. v .. ") end") or
-					loadstring("return (" .. v .. ")")
-
-				if not func then
-					return error("Cannot convert that to a function.")
-				end
+				local func = assert(loadstring("return (" .. v .. ")", DEBUGGER_LOADSTRING))
 
 				updateList[k] = func
 			else
@@ -1563,7 +1554,7 @@ function debugger.varDisplay(...)
 				return ]] .. varList .. [[
 			end
 		]]
-		getAdditionalInfo = loadstring(code)(pcall, unpack(varFunc))
+		getAdditionalInfo = loadstring(code, DEBUGGER_LOADSTRING)(pcall, unpack(varFunc))
 		printColor(color.yellow, ":Set custom Var. Display.")
 	else
 		getAdditionalInfo = function() end
@@ -1813,55 +1804,39 @@ debugger["0 - Don't screw with"] = true -- !!!
 debugger["1 - the variables or"] = true -- !!!
 debugger["2 - it may break!"]    = true -- !!!
 
+do
+	-- Safe updating functions that won't cause an error
+	function debugger.safeUpdate(dt)
+		return xpcall(debugger.update, realPrint, dt)
+	end
+
+	local function popNPrint(errormsg)
+		love.graphics.pop()
+		realPrint(errormsg)
+	end
+
+	function debugger.safeDraw()
+		return xpcall(debugger.draw, popNPrint)
+	end
+end
+
 setmetatable(debugger, {
 	__call = function(self)
 		-- Auto-Injection
 		self.registerHandlers()
 
-		local __update = love.update
-		local __draw = love.draw
+		local love_update = love.update
+		local love_draw = love.draw
 
-		loadstring([[
-			local self, love, __update, __draw, pcall, realPrint = ...
+		love.update = love_update and function(...)
+			self.safeUpdate(...)
+			love_update(...)
+		end or debug_update
 
-			if __update then
-				function love.update(...)
-					local s, r = pcall(self.update, ...)
-					if not s then
-						realPrint(r)
-					end
-
-					__update(...)
-				end
-			else
-				function love.update(...)
-					local s, r = pcall(self.update, ...)
-					if not s then
-						realPrint(r)
-					end
-				end
-			end
-
-			if __draw then
-				function love.draw(...)
-					__draw(...)
-
-					local s, r = pcall(self.draw)
-					if not s then
-						love.graphics.pop()
-						realPrint(r)
-					end
-				end
-			else
-				function love.draw(...)
-					local s, r = pcall(self.draw)
-					if not s then
-						love.graphics.pop()
-						realPrint(r)
-					end
-				end
-			end
-		]], "run_injection")(self, love, __update, __draw, pcall, realPrint)
+		love.draw = love_draw and function(...)
+			love_draw(...)
+			self.safeDraw()
+		end or debug_draw
 
 		return self
 	end
@@ -1908,7 +1883,7 @@ function debugger.errorhandler(message, stack)
 		event.pump()
 		for name, a,b,c,d,e,f in event.poll() do
 			if name == "quit" then
-				return true, a
+				return a or 0
 			elseif debugger.callbacks[name] then
 				xpcall(debugger.callbacks[name], print, a, b, c, d, e, f)
 			end
