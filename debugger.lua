@@ -1293,9 +1293,25 @@ function debugger.allowFunctionIndex(desc)
 			"assert", "collectgarbage", "dofile", "error", "gcinfo", "getfenv", "getmetatable", "ipairs", "load", "loadfile", "loadstring",
 			"module", "newproxy", "next", "pairs", "pcall", "rawequal", "rawget", "rawset", "require", "select",
 			"setfenv", "setmetatable", "type", "tonumber", "tostring", "unpack", "xpcall",
-			"bit", "coroutine", "debug", "io", "jit", "love", "math", "os", "string", "table", "package"
+			"coroutine", "debug", "io", "math", "os", "string", "table", "package"
 		} do
 			addName(_G[v], v)
+		end
+
+		for i,v in ipairs {
+			"bit", "jit", "love"
+		} do
+			local s, r = pcall(require, v)
+			if s then
+				addName(r, v)
+			end
+		end
+
+		do
+			local ffi = require "ffi"
+
+			addName(ffi, "ffi")
+			addName(getmetatable(ffi.new("int")), "<cdata>")
 		end
 
 		addName(debugger, "debugger")
