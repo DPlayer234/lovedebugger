@@ -41,6 +41,8 @@ local require = require
 
 local debug = require "debug"
 local utf8 = require "utf8"
+local ffi = require "ffi"
+
 local love = require "love"
 local love_keyboard = require "love.keyboard"
 local love_mouse = require "love.mouse"
@@ -50,7 +52,7 @@ local love_timer = require "love.timer"
 
 local collectgarbage = collectgarbage
 local setmetatable, getmetatable = setmetatable, debug.getmetatable
-local rawset, rawget = rawset, rawget
+local rawset, rawget, rawequal = rawset, rawget, rawequal
 
 local table, string, math = table, string, math
 local insert, remove, concat, sort = table.insert, table.remove, table.concat, table.sort
@@ -62,14 +64,21 @@ local utf8_len, utf8_codes, utf8_char, utf8_offset = utf8.len, utf8.codes, utf8.
 local DEBUGGER_LOADSTRING = "DEBUGGER"
 
 -- Fake nil value inserted where nil is needed.
+-- Basically, just an explicit nil (fakeNil == nil -> true)
 local fakeNil
 do
-	local fakeNilMeta = {
-		__tostring = function() return "nil" end,
-		type = function() return "*nil" end
-	}
-	fakeNilMeta.__index = fakeNilMeta
-	fakeNil = setmetatable({}, fakeNilMeta)
+	ffi.cdef "struct nil {};"
+
+	ffi.metatype("struct nil", {
+		__eq = function(a, b)
+			return rawequal(a, nil) or rawequal(b, nil) or rawequal(a, b)
+		end,
+		__tostring = function()
+			return "nil"
+		end
+	})
+
+	fakeNil = ffi.new("struct nil")
 end
 
 local type = type
@@ -88,7 +97,7 @@ local function safeIndex(table, key, depth)
 	depth = depth or 0
 	if depth > 5 then return end -- Prevent endlessly looping
 	local mt = getmetatable(table)
-	if mt == nil then -- No metatable
+	if type(mt) ~= "table" then -- No metatable
 		if type(table) ~= "table" then return end -- Not a table
 		return table[key] -- Return value
 	end
@@ -99,6 +108,7 @@ end
 
 -- Used to display alternative type
 local typeReal = function(v)
+	if rawequal(v, fakeNil) then return "nil *" end
 	local t = type(v)
 	local tf = safeIndex(v, "type")
 	if tf and tf ~= type then
@@ -152,7 +162,7 @@ end
 -- Setting the font
 local font, fheight
 function debugger.setFont(nfont)
-	assert( typeReal(nfont) == "userdata:Font", ":Not a font." )
+	assert(typeReal(nfont) == "userdata:Font", ":Not a font.")
 
 	font = nfont
 	fheight = font:getHeight()*font:getLineHeight()
@@ -202,7 +212,7 @@ local function proxyPrint(c, ...)
 		if i > top then top = i end
 	end
 	for i=1, top do
-		if args[i] == nil then
+		if rawequal(args[i], nil) then
 			args[i] = "nil"
 		end
 	end
@@ -665,7 +675,7 @@ function debugger.update(dt)
 						r[1] = ":Return values"
 						for i=2, max do
 							local v = r[i]
-							if v == nil then
+							if rawequal(v, nil) then
 								r[i] = "["..tostring(i-1).."] (nil)"
 							else
 								r[i] = "["..tostring(i-1).."] ("..typeReal(v)..") "..tostring(v)
@@ -701,7 +711,7 @@ function debugger.update(dt)
 						if display == "_G" then
 							ndisplay = ntext
 						else
-							ndisplay = display.."["..(ntype=="string" and format("%q", ntext) or tostring(ntext)).."]"
+							ndisplay = display.."["..(ntype == "string" and format("%q", ntext) or tostring(ntext)).."]"
 						end
 
 						local dv = getDv(ndisplay)
@@ -1125,7 +1135,7 @@ do
 				for k, v in pairs(updateList) do
 					local ok, value = pcall(v)
 					if ok then
-						if value == nil then
+						if rawequal(value, nil) then
 							rawset(t, k, fakeNil)
 						else
 							rawset(t, k, value)
@@ -1506,7 +1516,7 @@ function debugger.getStack(a, b)
 	local var = {}
 
 	local function realvalue(value)
-		return value == nil and fakeNil or value
+		return rawequal(value, nil) and fakeNil or value
 	end
 
 	local i=0
@@ -1524,7 +1534,7 @@ function debugger.getStack(a, b)
 			local name, value = getlocal(stack, l)
 			if not name then break end
 			if name:find("^%(") then
-				if this[name] == nil then
+				if rawequal(this[name], nil) then
 					this[name] = realvalue(value)
 				elseif type(this[name]) ~= "table" then
 					this[name] = { this[name] }
@@ -1847,12 +1857,12 @@ setmetatable(debugger, {
 		love.update = love_update and function(...)
 			self.safeUpdate(...)
 			love_update(...)
-		end or debug_update
+		end or self.safeUpdate
 
 		love.draw = love_draw and function(...)
 			love_draw(...)
 			self.safeDraw()
-		end or debug_draw
+		end or self.safeDraw
 
 		return self
 	end
