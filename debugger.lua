@@ -183,19 +183,23 @@ local lgtemp = {}
 local lgtime = {}
 local color = debugger.color
 
-local function validateUtf8(s) return utf8_len(s) and s:gsub("%z", " ") or ERROR_UTF8 end
-local function getLines(sf)
-	local nl = 0
-	for i=1, #sf do
-		local v = sf[i]
-		if type(v) == "string" then
-			local _, n = v:gsub("\n", "\n")
-			nl = nl + n
-		end
-	end
-	return nl
+-- Checks whether a utf8 string is valid and either returns it, having replaced all
+-- null bytes with spaces or the error message
+local function validateUtf8(s)
+	return utf8_len(s) and s:gsub("%z", " ") or ERROR_UTF8
 end
 
+-- Makes sure to correctly format something for display
+local function toDisplayString(value)
+	return type(value) == "string" and string.format("%q", value):gsub("\\?\n", "\\n") or tostring(value)
+end
+
+-- Makes sure there's no line breaks in a string and by replacing them with spaces
+local function toSingleLine(value)
+	return (tostring(value):gsub("\n", " "))
+end
+
+-- Print something to the local console
 local lastPrint, printedTimes
 local function proxyPrint(c, ...)
 	local args = {...}
@@ -264,6 +268,7 @@ local realPrint = print
 debugger.print = proxyPrint
 debugger.realPrint = realPrint
 
+-- Prints stuff everywhere
 function debugger.allPrint(...)
 	realPrint(...)
 	return proxyPrint(color.white, ...)
@@ -271,6 +276,7 @@ end
 
 print = debugger.allPrint
 
+-- Prints in color everywhere
 local function printColor(c, text)
 	realPrint(text)
 	return proxyPrint(c, text)
@@ -282,6 +288,7 @@ function debugger.clear()
 	debugger.tempClear()
 end
 
+-- Clears the temporary display only
 function debugger.tempClear()
 	for k,v in next, lgtemp do lgtemp[k] = nil end
 	for k,v in next, lgtime do lgtime[k] = nil end
@@ -671,8 +678,7 @@ function debugger.update(dt)
 						r[1] = ":Return values"
 						for i=2, max do
 							local v = r[i]
-							local data = type(v) == "string" and string.format("%q", v) or tostring(v)
-							r[i] = "[" .. tostring(i-1) .. "] (" .. validateUtf8(typeReal(v)) .. ") " .. validateUtf8(data)
+							r[i] = "[" .. tostring(i-1) .. "] (" .. validateUtf8(typeReal(v)) .. ") " .. validateUtf8(toSingleLine(toDisplayString(v)))
 						end
 						if #r > 0 then
 							printColor(color.yellow, table_concat(r, "\n\t"))
@@ -704,7 +710,7 @@ function debugger.update(dt)
 						if display == "_G" then
 							ndisplay = ntext
 						else
-							ndisplay = display.."["..(ntype == "string" and string.format("%q", ntext) or tostring(ntext)).."]"
+							ndisplay = display .. "[" .. toSingleLine(toDisplayString(ntext)) .. "]"
 						end
 
 						local dv = getDv(ndisplay)
@@ -944,8 +950,8 @@ function debugger.draw()
 					local v = dv[k]
 
 					addType(validateUtf8(typeReal(v)))
-					addName(validateUtf8(tostring(k)))
-					addData(validateUtf8(type(v) == "string" and string.format("%q", v) or tostring(v)))
+					addName(validateUtf8(toSingleLine(k)))
+					addData(validateUtf8(toSingleLine(toDisplayString(v))))
 				elseif i > maxLines + yScroll - 4 then
 					break
 				end
@@ -1679,10 +1685,14 @@ function debugger.setProfiler(profileLib, reportPath)
 		notInDebugger,
 		cloneList,
 		validateUtf8,
-		getLines,
+		toSingleLine,
+		toDisplayString,
 		printColor,
 		rfalse,
 		nicerPush,
+		_tostring,
+		safeIndex,
+		typeReal,
 		getmetatable(debugger).__call
 	}
 
