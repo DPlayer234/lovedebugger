@@ -1,0 +1,223 @@
+--[[
+Copyright © 2017-2018 Darius "DPlay" K.
+This work is free. You can redistribute it and/or modify it under the
+terms of the Do What The Fuck You Want To Public License, Version 2,
+as published by Sam Hocevar. See the COPYING file for more details.
+]]
+return function(DBG)
+	local utf8 = require "utf8"
+	local love_graphics = require "love.graphics"
+	local love_timer = require "love.timer"
+
+	local table, string, math = table, string, math
+	local pcall, collectgarbage = pcall, collectgarbage
+
+	local function countString(str, patt)
+		local _, c = str:gsub(patt, "")
+		return c
+	end
+
+	-- Printing the Lua prompt
+	local function promptPrint(w, h, fheight)
+		local prompt = table.concat(DBG._textTable)
+		local width = DBG._font:getWidth(prompt)
+		local x = width < w and 0 or w-width
+		love_graphics.print(prompt, x, h - fheight)
+		if love_timer.getTime() % 0.5 >= 0.25 then
+			if DBG._textPosition > #DBG._textTable then
+				love_graphics.rectangle("fill", DBG._font:getWidth(prompt), h - fheight, DBG._font:getWidth(" "), fheight)
+			else
+				love_graphics.rectangle("fill",
+					DBG._font:getWidth(table.concat(DBG._textTable, "", 1, DBG._textPosition - 1)) + x,
+					h - fheight,
+					DBG._font:getWidth(table.concat(DBG._textTable, "", DBG._textPosition, DBG._textPosition)) - 1, fheight)
+			end
+		end
+	end
+
+	-- Drawing everything
+	function DBG.draw()
+		-- Storing the current graphics state and resetting it
+		love_graphics.push("all")
+		love_graphics.origin()
+		love_graphics.setFont(DBG._font)
+		love_graphics.setScissor()
+		love_graphics.setShader()
+		love_graphics.setBlendMode("alpha")
+		love_graphics.setColorMask(true, true, true, true)
+		love_graphics.setWireframe(false)
+
+		local ram = collectgarbage("count")
+		DBG._fontHeight = math.abs(DBG._font:getHeight()*DBG._font:getLineHeight())
+		local w, h = love_graphics.getDimensions()
+
+		if DBG.isActive() then
+			-- Prompt and Environment is opened
+			local tt = math.ceil(w*DBG.printArea)
+
+			local _, wrap = DBG._font:getWrap(DBG._lg, tt)
+			local hlg = #wrap*DBG._fontHeight
+
+			local dv, index = DBG._getDvIndex(DBG._envPath)
+			local vartype = DBG.typeReal(dv):gsub(" ", " ")
+			if DBG._indexFunctions and vartype == "function" then
+				dv = dv.___allupvalues
+			end
+
+			local printType, indexType = {}, 1
+			local printName, indexName = {}, 1
+			local printData, indexData = {}, 1
+
+			local function addType(arg)
+				printType[indexType] = arg
+				indexType = indexType + 1
+			end
+
+			local function addName(arg)
+				printName[indexName] = arg
+				indexName = indexName + 1
+			end
+
+			local function addData(arg)
+				printData[indexData] = arg:sub(1, 150)
+				indexData = indexData + 1
+			end
+
+			local maxLines = math.ceil(h / DBG._fontHeight)
+
+			if index then
+				-- Indexable
+				for i=1, #index do
+					if i >= DBG._yScroll and i <= maxLines + DBG._yScroll - 4 then
+						local k = index[i]
+						local v = dv[k]
+
+						addType(DBG._validateUtf8(DBG.typeReal(v)))
+						addName(DBG._validateUtf8(DBG._toSingleLine(k)))
+						addData(DBG._validateUtf8(DBG._toSingleLine(DBG._toDisplayString(v))))
+					elseif i > maxLines + DBG._yScroll - 4 then
+						break
+					end
+				end
+
+				addType("\t>>>\n")
+				addName("")
+			else
+				addType(DBG._tostring(dv):gsub(" ", " ").."\n\t>>>\n")
+			end
+
+			-- Variable Path
+			local path = (DBG._envPath == "_G" and "..." or "> " .. DBG._envPath):gsub("getmetatable%(", "Meta("):gsub("%[\"", " > "):gsub("\"%]", ""):gsub(" ", " ")
+			if DBG._font:getWidth("\t" .. path) > w-tt then
+				while DBG._font:getWidth("\t…" .. path) > w-tt do
+					local byteoffset = utf8.offset(path, 2)
+					if byteoffset then
+						path = path:sub(byteoffset, #path)
+					else
+						break
+					end
+				end
+				path = "…"..path
+			end
+
+			local stringType = table.concat(printType, " \n")
+			local stringName = table.concat(printName, " \n")
+			local stringData = table.concat(printData, "\n")
+
+			local header = string.format("\t%s\n\tType: %s %03dy\t", path, vartype, DBG._yScroll)
+			if not DBG.useTitleBar then
+				header = header .. " ~" .. math.floor(ram + 0.5) .. " KB " .. love_timer.getFPS() .. " FPS"
+			end
+			local hprinted = countString(stringType, "\n")*DBG._fontHeight
+
+			-- Printed text and Prompt
+			love_graphics.setColor(DBG.color.bgActive)
+			love_graphics.rectangle("fill", 0, 0, tt - 1, hlg)
+			love_graphics.rectangle("fill", 0, math.ceil(h - DBG._fontHeight), w, DBG._fontHeight)
+
+			love_graphics.setColor(DBG.color.fgActive)
+			if DBG.printArea > 0 then
+				love_graphics.setScissor(0, 0, tt - 1, hlg)
+				love_graphics.printf(DBG._lg, 0, 0, tt, "left")
+				love_graphics.setScissor()
+			end
+
+			pcall(promptPrint, w, h, DBG._fontHeight)
+
+			-- Environment Display
+			if DBG.printArea < 1 then
+				local wt = w - tt
+				local wh = math.ceil(h - DBG._fontHeight - 1)
+				local tw = math.ceil(wt * 0.25)
+				local nw = math.ceil(wt * 0.25)
+
+				love_graphics.setScissor(tt, 0, wt, wh)
+
+				love_graphics.setColor(DBG.color.bgActive)
+				love_graphics.rectangle("fill", tt, 0, wt, hprinted + DBG._fontHeight * 2)
+
+				love_graphics.setColor(DBG.color.fgActive2)
+				love_graphics.printf(header, tt, 0, wt, "justify")
+
+				love_graphics.setColor(DBG.color.fgActive)
+
+				love_graphics.setScissor(tt, 0, tw, wh)
+				love_graphics.print(stringType, tt, DBG._fontHeight * 2)
+
+				love_graphics.setScissor(tt + tw + nw, 0, wt - tw - nw, wh)
+				love_graphics.print(stringData, tt + tw + nw, DBG._fontHeight * 2)
+
+				love_graphics.setScissor(tt + tw, 0, nw, wh)
+				love_graphics.setColor(DBG.color.fgActive2)
+				love_graphics.print(stringName, tt + tw, DBG._fontHeight*2)
+			end
+		elseif DBG.doTempPrint then
+			-- Printing the print calls
+			local updateDif = love_timer.getTime() - DBG._updateTime
+			local tt = math.ceil(w * DBG.printArea) - 1
+
+			local _, wrap = DBG._font:getWrap(DBG._lgTemp, tt)
+			local hlg = #wrap * DBG._fontHeight
+			local tw, wrap, infoText
+
+			love_graphics.setColor(DBG.color.bgNotActive)
+			love_graphics.rectangle("fill", 0, 0, tt, hlg)
+			if not DBG.useTitleBar then
+				infoText = infoBox(love_timer.getFPS(), ram, updateDif)
+				tw, wrap = DBG._font:getWrap(infoText, w)
+				love_graphics.rectangle("fill", w - tw, 0, tw, #wrap * DBG._fontHeight)
+			end
+
+			love_graphics.setColor(DBG.color.fgNotActive)
+			if DBG.printArea > 0 then
+				love_graphics.printf(DBG._lgTemp, 0, 0, tt, "left")
+			end
+			if not DBG.useTitleBar then
+				love_graphics.printf(infoText, w - tw, 0, tw, "right")
+			end
+		elseif not DBG.useTitleBar then
+			-- Not printing the print calls
+			local updateDif = love_timer.getTime() - DBG._updateTime
+			local infoText = infoBox(love_timer.getFPS(), ram, updateDif)
+			local tw, wrap = DBG._font:getWrap(infoText, w)
+
+			love_graphics.setColor(DBG.color.bgNotActive)
+			love_graphics.rectangle("fill", w-tw, 0, tw, #wrap * DBG._fontHeight)
+
+			love_graphics.setColor(DBG.color.fgNotActive)
+			love_graphics.printf(infoText, w - tw, 0, tw, "right")
+		end
+
+		if DBG.useTitleBar then
+			DBG._titleManager.setTitle(DBG._infoTitle(DBG._titleManager.getRegularTitle(), love_timer.getFPS(), ram, love_timer.getTime() - DBG._updateTime))
+		elseif DBG._titleManager.titleUpdated then
+			DBG._titleManager.setTitle(DBG._titleManager.getRegularTitle())
+			DBG._titleManager.titleUpdated = false
+		end
+
+		-- Returning the graphics state
+		love_graphics.pop()
+	end
+
+	DBG.addSource()
+end

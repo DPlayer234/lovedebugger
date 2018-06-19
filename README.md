@@ -2,7 +2,7 @@
 
 (Not so) simple debugging tool for [Löve](https://www.love2d.org/), currently for Löve version 11.0 (for older version, please check older releases).
 
-Download the 'debugger.lua' file (or 'debugger_t.lua' which is trimmed of whitespace) and include it in your Lua path or game directory (I suggest against leaving debug code in releases).
+Download/Clone the repository and include the 'debugger' folder in your Lua path or game directory (I suggest against leaving debug code in releases).
 
 ---
 
@@ -223,7 +223,7 @@ debugger.clearPrompt = "f5"
 -- Löve KeyConstant of the key used to clear the Lua prompt
 -- and toggle 'debugger.doTempPrint'.
 
-debugger.textfade    = 7
+debugger.textFade    = 7
 -- Time it takes for text to fade away after its 'print'
 -- call in seconds while the Lua prompt is closed.
 
@@ -306,11 +306,11 @@ If you want the profiler's reports to use the function name returned by tostring
 * It always uses 'debug.getmetatable' rather than 'getmetatable'. Therefore it can access metatables even if those have a '\_\_metatable' key.
 * The variable 'getmetatable' is overriden by 'debug.getmetatable' within the Lua prompt.
 * This tool monkey-patches Lua's 'print' (but not 'io.write') function. The original function is stored as 'debugger.realPrint'.
-* It will attempt to require "debugger_font", which it expects to return a Font to use, on load. If it finds such a file, and it does not return a Font, it may crash.
+* It will attempt to require "(require-path).font", which it expects to return a Font to use, on load. If it finds such a file, and it does not return a Font, it may crash.
 
 ---
 
-Copyright © 2017 Darius "DPlay" K.<br>
+Copyright © 2017-2018 Darius "DPlay" K.<br>
 This work is free. You can redistribute it and/or modify it under the<br>
 terms of the Do What The Fuck You Want To Public License, Version 2,<br>
 as published by Sam Hocevar. See the COPYING file for more details.
