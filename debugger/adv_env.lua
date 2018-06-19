@@ -25,6 +25,11 @@ return function(DBG)
 		local upval = setmetatable({}, {__mode = "kv"})
 		local ret = setmetatable({}, {__mode = "kv", __index = function()return{}end})
 		local retn = setmetatable({}, {__mode = "kv"})
+
+		local isVarName = function(name)
+			return name:find("^[_a-zA-Z][_a-zA-Z0-9]*$") and true
+		end
+
 		local getlist = function(f)
 			if upval[f] then
 				return upval[f]
@@ -34,7 +39,7 @@ return function(DBG)
 				local i = 1
 				local k, v = debug.getupvalue(f, i)
 				while k do
-					fup[k] = i
+					fup[isVarName(k) and k or i] = i
 					i = i + 1
 					k, v = debug.getupvalue(f, i)
 				end
