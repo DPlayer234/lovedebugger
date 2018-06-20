@@ -120,21 +120,29 @@ Then there's also a few additional debugger functions you may access if required
 ```lua
 debugger.setFont(font)
 -- Sets a new font to be used by the console and such
-debugger.getFont()
+
+local font = debugger.getFont()
 -- Returns the currently used font
 
 debugger.allPrint(...)
 -- Prints text everywhere (the same as print after requiring the module)
+
+debugger.printColor(colorTable, ...)
+-- Prints text everywhere and with a certain color to debugger's console.
+
 debugger.print(colorTable, ...)
 -- Print exclusively to the debugger's console in the defined color
+
 debugger.realPrint(...)
 -- Regular Lua print function
+
 debugger.clear()
 -- Clears the console
+
 debugger.tempClear()
 -- Only clear the temporary console
 
-debugger.typeReal(value)
+local typeString = debugger.typeReal(value)
 -- Returns the "real" user type of the value
 -- This function is also used internally in the environment display and some other things.
 -- It tries to get a value in the key 'type' of the value. Either returns that if it is
@@ -142,12 +150,16 @@ debugger.typeReal(value)
 
 debugger.setActive(active)
 -- Sets whether or not the Lua prompt is active
-debugger.isActive()
+
+local active = debugger.isActive()
 -- Returns whether the Lua prompt is active
 
-debugger.addUpdate(func, [priority])
--- Adds a function to be called every frame. The function is passed dt (if dt is passed
--- to debugger.update).
+local id = debugger.addUpdate(func, [priority])
+-- Adds a function to be called every frame. The function is passed dt.
+-- The ID can be passed to debugger.removeUpdate(id) to remove the function once again.
+
+debugger.removeUpdate(id)
+-- Removes a function by ID from being called every frame.
 
 debugger.allowFunctionIndex([nicer_name])
 -- Enables function indexing, allowing you to browse the upvalues
@@ -160,12 +172,25 @@ function myFunc()--[[my function name]] ... end
 myFunc2 = function()--[[my function name #2]] ... end
 -- Make sure not to put any spaces between the brackets and the comment
 -- and also to make sure it's a block comment on a single line.
+-- Additionally, enabled function indexing allows you to index functions
+-- with the these special keys:
+-- debugger.FUNCTION_CODE: Function code
+-- debugger.FUNCTION_UPVALUES: A table containing all upvalues.
+
+debugger.disallowFunctionIndex()
+-- Disables function indexing.
+
+local allowed = debugger.isFunctionIndexAllowed()
+-- Returns whether function indexing is allowed.
 
 debugger.monitorGlobal([writeTo])
 -- Enables monitoring the global environment for unusual changes or activities
 -- (by which I mean, new definitions, accessing unused variables etc.).
 -- 'writeto' is the file path (within the Löve save directory) to write the output to.
 -- Defaults to '_G (log).txt'.
+
+debugger.stopMonitorGlobal()
+-- Stops monitoring the global environment.
 
 debugger.viewLocals(source, inLine, [var, key])
 -- Used debug.sethook to write the locals given to a table.
@@ -178,7 +203,7 @@ debugger.viewLocals(source, inLine, [var, key])
 -- Calling it without any arguments will reset it. Calling it while running will override the
 -- existing routine.
 
-debugger.getStack([thread], stack_level)
+local stack = debugger.getStack([thread], stack_level)
 -- Returns a table containing with each level of the current stack as its own table.
 -- Each of the stack-tables contains all local variables at that point as well as all a
 -- reference to the running function and whatever debug.getinfo gives out as a name.
@@ -211,6 +236,19 @@ debugger.errorhandler(error_message, [stack_level])
 -- a way that the traceback starts at the correct point.
 -- Can also be used as a pseudo-breakpoint by calling in within your code.
 -- To continue, try to close the application in that case.
+
+debugger.executeLuaCode(luaCode)
+-- Executes Lua Code as if it was run from the console.
+
+debugger.executeCommand(command)
+-- Executes a command as if it was run from the console.
+
+debugger.hideFields(var, pattern)
+-- Hides fields whose name matches a certain pattern in a table.
+-- Does not work for the upvalues of functions.
+
+local down = debugger.isDown(inputId)
+-- Returns whether a given input is held.
 ```
 
 There's also a few constants that you may modify as well:
@@ -227,7 +265,7 @@ debugger.textFade    = 7
 -- Time it takes for text to fade away after its 'print'
 -- call in seconds while the Lua prompt is closed.
 
-debugger.printArea   = 2/3
+debugger.printWidth   = 2/3
 -- Screen Area where the prints are displayed (ratio 0.0-1.0).
 
 debugger.maxStorage  = 100

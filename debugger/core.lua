@@ -6,26 +6,31 @@ as published by Sam Hocevar. See the COPYING file for more details.
 ]]
 return function(DBG)
 	local ffi = require "ffi"
+	local utf8 = require "utf8"
 	local debug = require "debug"
 	local love_graphics = require "love.graphics"
 
-	local assert, pcall, next, type, rawequal = assert, pcall, next, type, rawequal
+	local assert, pcall, next, type, rawequal, select = assert, pcall, next, type, rawequal, select
 	local table = table
 
 	DBG._LOADSTRING_SRC = "DBG_SRC_STRING"
+	DBG._ENV_ROOT_PATH = "_G"
+	DBG._ENV_ROOT = _G
 
 	DBG._textTable = {}
 	DBG._textPosition = 0
 
-	DBG._envPath = "_G"
+	DBG._envPath = DBG._ENV_ROOT_PATH
 	DBG._yScroll = 1
-	DBG._inputs = {}
 
-	DBG._textInput = ""
+	DBG._ram = 0
+
 	DBG._textTable = {}
 	DBG._textPosition = 1
 	DBG._lastSelect = 0
 	DBG._lastInput = {}
+
+	DBG._hidden = setmetatable({}, { __mode = "k" })
 
 	-- Gets the currently navigated to value
 	function DBG._getDv(envPath)
@@ -43,10 +48,16 @@ return function(DBG)
 		if type(dv) == "table" then
 			return dv, DBG._sortedTable(dv)
 		end
-		if DBG._indexFunctions and type(dv) == "function" then
-			return dv, DBG._sortedTable(dv.___allupvaluenames)
+		if DBG.isFunctionIndexAllowed() and type(dv) == "function" then
+			return dv, DBG._sortedTable(dv[DBG.FUNCTION_UPVALUE_NAMES])
 		end
 		return dv
+	end
+
+	-- Hide fields of a certain table via pattern in the environment display
+	function DBG.hideFields(table, pattern)
+		assert(type(pattern) == "string", ":Argument #2 to DBG.hideFields(table, pattern) must be a string!")
+		DBG._hidden[table] = pattern
 	end
 
 	-- Sets the used font
@@ -71,14 +82,75 @@ return function(DBG)
 	-- Sorts a table
 	function DBG._sortedTable(t)
 		local to = {}
-		for k,v in next, t do
-			to[#to+1] = k
+		if DBG._hidden[t] then
+			local hidden = DBG._hidden[t]
+
+			for k, v in next, t do
+				if type(k) ~= "string" or k:find(hidden) == nil then
+					to[#to+1] = k
+				end
+			end
+		else
+			for k,v in next, t do
+				to[#to+1] = k
+			end
 		end
-		pcall(table.sort, to, sortCont) -- <= Real Sorting
+		pcall(table.sort, to, sortCont)
 		return to
 	end
 
-	-- Returns whether the scope is outside of the DBG
+	-- Navigates to an environment path
+	function DBG._navigateTo(envPath)
+		DBG._envPath = envPath
+		DBG._yScroll = 1
+	end
+
+	-- Navigates to the metatable of the environment path
+	function DBG._navigateToMetaTable(dv, envPath)
+		local m = debug.getmetatable(dv)
+
+		if type(m) == "table" then
+			DBG._navigateTo("getmetatable(" .. envPath .. ")")
+		end
+	end
+
+	-- Navigates to the parent of the environment path
+	function DBG._navigateToParent(envPath)
+		repeat
+			local s = envPath
+
+			if s:find("^getmetatable%(.*%)$") then
+				envPath = s:sub(14, #s-1)
+			elseif s:find("%(%)$") then
+				envPath = s:sub(1, #s-2)
+			else
+				local e, _e = s:find("%[")
+				if e then s = s:sub(e+1, #s) end
+				local r = 0
+				while e do
+					r = r + e
+					e, _e = s:find("%[")
+					if e then s = s:sub(e+1, #s) end
+				end
+
+				if r > 0 then
+					envPath = envPath:sub(1, r-1)
+				else
+					envPath = DBG._ENV_ROOT_PATH
+				end
+			end
+		until envPath == DBG._ENV_ROOT_PATH or select(2, DBG._getDvIndex(envPath))
+
+		DBG._navigateTo(envPath)
+	end
+
+	-- Copies text to the console
+	function DBG._copyTextToConsole(text)
+		for p, c in utf8.codes(text) do
+			DBG.callbacks.textinput(utf8.char(c))
+		end
+	end
+
 	do
 		local getinfo = debug.getinfo
 
@@ -86,10 +158,12 @@ return function(DBG)
 			[DBG._LOADSTRING_SRC] = true
 		}
 
+		-- Returns whether the scope is outside of the DBG
 		function DBG.notInDebugger()
 			return not sources[debug.getinfo(3, "S").source]
 		end
 
+		-- Adds the file the given function or it was called in to the debugger sources.
 		function DBG.addSource(func)
 			sources[debug.getinfo(func or 2, "S").source] = true
 		end

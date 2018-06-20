@@ -7,10 +7,10 @@ as published by Sam Hocevar. See the COPYING file for more details.
 return function(DBG)
 	local debug = require "debug"
 
-	local assert, type, next = assert, type, next
+	local assert, type, next, tonumber, pcall, unpack, loadstring, next = assert, type, next, tonumber, pcall, unpack, loadstring, next
 	local string, table = string, table
 
-	DBG._commands = {}
+	local commands = {}
 
 	-- Creates a new command
 	function DBG.newCommand(name, args, func)
@@ -18,16 +18,16 @@ return function(DBG)
 		assert(type(args) == "string", "Argument #2 to DBG.newCommand(name, args, func) must be a string!")
 		assert(type(func) == "function" or debug.getmetatable(func) and rawget(debug.getmetatable(func), "__call"), "Argument #3 to DBG.newCommand(name, args, func) must be callable!")
 
-		if DBG._commands[name] == nil then
-			DBG._commands[name] = { name = name, alias = {} }
-		elseif DBG._commands[name].name ~= name then
-			error(":Cannot add alternative syntax to alias '" .. DBG._tostring(name) .. "' of command '" .. DBG._tostring(DBG._commands[name].name) .. "'.")
+		if commands[name] == nil then
+			commands[name] = { name = name, alias = {} }
+		elseif commands[name].name ~= name then
+			error(":Cannot add alternative syntax to alias '" .. DBG._tostring(name) .. "' of command '" .. DBG._tostring(commands[name].name) .. "'.")
 		end
 		local c = {
 			args = args,
 			func = func
 		}
-		DBG._commands[name][#DBG._commands[name]+1] = c
+		commands[name][#commands[name]+1] = c
 	end
 
 	-- Aliases a command
@@ -35,11 +35,115 @@ return function(DBG)
 		assert(type(name) == "string", "Argument #1 to DBG.aliasCommand(name, as) must be a string!")
 		assert(type(as)   == "string", "Argument #2 to DBG.aliasCommand(name, as) must be a string!")
 
-		assert(DBG._commands[name] ~= nil, ":Command '"..name.."' doesn't exist!")
-		assert(DBG._commands[as] == nil, ":Command '"..as.."' exists already.")
+		assert(commands[name] ~= nil, ":Command '"..name.."' doesn't exist!")
+		assert(commands[as] == nil, ":Command '"..as.."' exists already.")
 
-		DBG._commands[as] = DBG._commands[name]
-		DBG._commands[name].alias[#DBG._commands[name].alias+1] = as
+		commands[as] = commands[name]
+		commands[name].alias[#commands[name].alias+1] = as
+	end
+
+	-- Executes Lua code as the console would
+	function DBG.executeLuaCode(luaCode)
+		-- Attempting return to print that on the screen
+		DBG.printColor(DBG.color.yellow, ">> " .. luaCode)
+
+		local r = { loadstring("local getmetatable=...;return " .. luaCode, DBG._LOADSTRING_SRC) }
+		if not r[1] then
+			r = { loadstring("local getmetatable=...;" .. luaCode, DBG._LOADSTRING_SRC) }
+		end
+		if r[1] then
+			r = { pcall(r[1], debug.getmetatable) }
+		end
+		if r[1] == true then
+			local max = 0
+			for i,v in next, r do if i > max then max = i end end
+			if max > 1 then
+				r[1] = ":Return values"
+				for i=2, max do
+					local v = r[i]
+					r[i] = "[" .. DBG._tostring(i-1) .. "] (" .. DBG._validateUtf8(DBG.typeReal(v)) .. ") " .. DBG._validateUtf8(DBG._toSingleLine(DBG._toDisplayString(v)))
+				end
+				if #r > 0 then
+					DBG.printColor(DBG.color.yellow, table.concat(r, "\n\t"))
+				end
+			end
+		else
+			DBG.printColor(DBG.color.red, ":ERROR:" .. DBG._tostring(r[2]))
+		end
+	end
+
+	-- Executes a command
+	function DBG.executeCommand(command)
+		local args = {}
+		local inString, string = false, nil
+		for match in command:gmatch("%S+") do
+			if inString then
+				if match:find("\"$") then
+					args[#args+1] = string .. " " .. match:sub(1, #match-1)
+					inString, string = false, nil
+				else
+					string = string .. " " .. match
+				end
+			elseif match:find("^\".*[^\"]$") then
+				inString, string = true, match:sub(2, #match)
+			else
+				args[#args+1] = match
+			end
+		end
+
+		local one = table.remove(args, 1)
+		local command = commands[one:sub(2, #one)]
+		if command then
+			local pattern = "^"
+			for i=1, #args do
+				local v = args[i]
+				if tonumber(v) then
+					pattern = pattern.."[bns]"
+				elseif v == "true" or v == "false" then
+					pattern = pattern.."[bs]"
+				else
+					pattern = pattern.."s"
+				end
+			end
+			pattern = pattern.."$"
+
+			local this
+			for i=1, #command do
+				local v = command[i]
+				if pattern == "" then
+					if v.args == "" then
+						this = v
+						break
+					end
+				elseif v.args:find(pattern) then
+					this = v
+					break
+				end
+			end
+
+			if this then
+				local i = 0
+				for c in this.args:gmatch(".") do
+					i = i + 1
+					if c == "n" then
+						args[i] = tonumber(args[i])
+					elseif c == "b" then
+						args[i] = args[i] ~= "false" and args[i] ~= "0"
+					end
+				end
+
+				local s,out = pcall(this.func, unpack(args))
+				if s then
+					DBG.printColor(DBG.color.yellow, out or ":Executed.")
+				else
+					DBG.printColor(DBG.color.red, ":ERROR:" .. DBG._tostring(out))
+				end
+			else
+				DBG.printColor(DBG.color.red, ":ERROR:Incorrect arguments...")
+			end
+		else
+			DBG.printColor(DBG.color.red, ":ERROR:Unknown command. Add commands with DBG.newCommand(name, args, function)")
+		end
 	end
 
 	-- Adding some default commands!
@@ -57,14 +161,12 @@ return function(DBG)
 
 	-- Quick navigation
 	DBG.newCommand("to", "", function()
-		DBG._envPath = "_G"
-		DBG._yScroll = 1
+		DBG._navigateTo(DBG._ENV_ROOT_PATH)
 		return ":Moved to "..DBG._envPath.."."
 	end)
 
 	DBG.newCommand("to", "s", function(s)
-		DBG._envPath = s:gsub("%.([^%[%]\"'%(%)%{%}%.]*)", function(t) return string.format("[%q]", t) end)
-		DBG._yScroll = 1
+		DBG._navigateTo(s:gsub("%.([^%[%]\"'%(%)%{%}%.]*)", function(t) return string.format("[%q]", t) end))
 		return ":Moved to " .. DBG._envPath .. "."
 	end)
 
@@ -73,7 +175,7 @@ return function(DBG)
 	-- Help about commands
 	DBG.newCommand("help", "", function()
 		local all = {}
-		for k,v in next, DBG._commands do
+		for k,v in next, commands do
 			if k == v.name then
 				all[#all+1] = "\t"..k
 			end
@@ -84,7 +186,7 @@ return function(DBG)
 	end)
 
 	DBG.newCommand("help", "s", function(s)
-		local cmd = DBG._commands[s]
+		local cmd = commands[s]
 		if cmd then
 			local name = cmd.name
 			local all = {}

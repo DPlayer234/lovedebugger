@@ -115,7 +115,7 @@ return function(DBG)
 		unhook(DBG._mouse)
 		unhook(DBG._titleManager)
 
-		if DBG._indexFunctions and DBG._prettyFunctions then
+		if DBG.isFunctionIndexAllowed() and DBG.hasPrettyFunctionNames() then
 			-- If the profiler given is not compatible, this will crash!
 			-- I don't take any responsibility for that.
 			local _defined = profileLib.hook._defined

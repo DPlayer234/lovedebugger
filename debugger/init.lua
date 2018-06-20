@@ -8,10 +8,8 @@ local DBG = {}
 
 DBG._PATH = (...):gsub("%.init$", "")
 
-DBG.NOTE1 = "Fields prefixed with '_'"
-DBG.NOTE2 = "are internal and undocumented."
-DBG.NOTE3 = "Use or modify them at your own"
-DBG.NOTE4 = "risk.                  --DPlay"
+DBG[1] = "Modifications are at your"
+DBG[2] = "own risk. HF!      -DPlay"
 
 local function loadModule(mod)
 	return require(DBG._PATH .. "." .. mod)(DBG)
@@ -34,15 +32,15 @@ loadModule "profile"
 local love = require "love"
 local love_graphics = require "love.graphics"
 
+-- Loading font in Lua path
 do
-	-- Loading font in lua path
 	DBG.setFont(love_graphics.getFont())
 	local s, lFont = pcall(require, DBG._PATH .. ".font")
 	if s then pcall(DBG.setFont, lFont) end
 end
 
+-- Safe updating functions that won't cause an error ever
 do
-	-- Safe updating functions that won't cause an error ever
 	local xpcall = xpcall
 
 	function DBG.safeUpdate(dt)
@@ -80,6 +78,8 @@ setmetatable(DBG, {
 		return self
 	end
 })
+
+DBG.hideFields(DBG, "^_.*$")
 
 DBG.addSource()
 

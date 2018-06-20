@@ -9,7 +9,7 @@ return function(DBG)
 	local love_timer = require "love.timer"
 
 	local next, rawequal = next, rawequal
-	local table = table
+	local table, math = table, math
 
 	local lg, lgTemp, lgTime = {}, {}, {}
 
@@ -38,7 +38,7 @@ return function(DBG)
 
 		if t ~= lastPrint then
 			local time = love_timer.getTime()
-			for s in t:gmatch("[^\n]*\n") do
+			for s in t:gmatch(".-\n") do
 				table.insert(lg, c)
 				table.insert(lg, s)
 
@@ -46,16 +46,6 @@ return function(DBG)
 				table.insert(lgTemp, s)
 
 				table.insert(lgTime, time)
-			end
-
-			while #lg > 2 and #lg*0.5 > love_graphics.getHeight() / DBG._fontHeight - 1 do
-				table.remove(lg, 1)
-				table.remove(lg, 1)
-			end
-
-			while #lgTemp > 2 and #lgTemp*0.5 > love_graphics.getHeight() / DBG._fontHeight - 1 do
-				table.remove(lgTemp, 1)
-				table.remove(lgTemp, 1)
 			end
 
 			lastPrint = t
@@ -106,6 +96,16 @@ return function(DBG)
 	function DBG.tempClear()
 		for k,v in next, lgTemp do lgTemp[k] = nil end
 		for k,v in next, lgTime do lgTime[k] = nil end
+	end
+
+	-- Fades the text in the temporary log out
+	function DBG._tempFade()
+		local ctime = love_timer.getTime()
+		while #lgTime > 0 and lgTime[1] + DBG.textFade < ctime do
+			table.remove(lgTemp, 1)
+			table.remove(lgTemp, 1)
+			table.remove(lgTime, 1)
+		end
 	end
 
 	DBG._lg = lg

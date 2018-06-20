@@ -8,13 +8,17 @@ return function(DBG)
 	local debug = require "debug"
 	local assert, setmetatable, next, type, ipairs, pairs, pcall, rawequal = assert, setmetatable, next, type, ipairs, pairs, pcall, rawequal
 
-	DBG._indexFunctions = false
-	DBG._prettyFunctions = false
+	local indexFunctions = false
+	local prettyFunctions = false
+
+	DBG.FUNCTION_CODE = "DBG.FUNCTION_CODE"
+	DBG.FUNCTION_UPVALUES = "DBG.FUNCTION_UPVALUES"
+	DBG.FUNCTION_UPVALUE_NAMES = "DBG.FUNCTION_UPVALUE_NAMES"
 
 	-- Up-Value-getter
 	function DBG.allowFunctionIndex(prettyNames)
-		DBG._indexFunctions = true
 		DBG.printColor(DBG.color.red, "\tAllowing the indexing of functions!\nAccess to indexing is only allowed within the command line.")
+		indexFunctions = true
 
 		local filesystem = require("love.filesystem")
 		local isFile = function(path)
@@ -55,12 +59,12 @@ return function(DBG)
 
 				local fup = getlist(f)
 
-				if k == "___allupvalues" then
+				if k == DBG.FUNCTION_UPVALUES then
 					local t = ret[f]
 					local _
 					for k,v in next, fup do _, t[k] = debug.getupvalue(f, v) end
 					return t
-				elseif k == "___allupvaluenames" then
+				elseif k == DBG.FUNCTION_UPVALUE_NAMES then
 					if retn[f] then
 						return retn[f]
 					else
@@ -69,7 +73,7 @@ return function(DBG)
 						retn[f] = t
 						return t
 					end
-				elseif k == "___code" then
+				elseif k == DBG.FUNCTION_CODE then
 					if debug.getinfo then
 						local info = debug.getinfo(f, "S")
 						local source = (info.source or ""):gsub("^@", "")
@@ -113,7 +117,7 @@ return function(DBG)
 		}
 
 		if prettyNames and debug.getinfo then
-			DBG._prettyFunctions = true
+			prettyFunctions = true
 
 			local amount, bytes = 1, 5
 			local hardnames = {
@@ -121,6 +125,7 @@ return function(DBG)
 			}
 
 			local indexed = {
+				[DBG._ENV_ROOT] = true,
 				[package.loaded] = true,
 				[package.preload] = true
 			}
@@ -129,8 +134,10 @@ return function(DBG)
 				if indexed[item] or hardnames[item] then return end
 				if type(item) == "table" then
 					indexed[item] = true
-					for k,v in next, item do
-						addName(v, path.."."..k)
+					for k, v in next, item do
+						if type(k) == "string" then
+							addName(v, path .. "." .. k)
+						end
 					end
 				elseif type(item) == "function" then
 					hardnames[item] = path
@@ -145,7 +152,7 @@ return function(DBG)
 				"setfenv", "setmetatable", "type", "tonumber", "tostring", "unpack", "xpcall",
 				"coroutine", "debug", "io", "math", "os", "string", "table", "package"
 			} do
-				addName(_G[v], v)
+				addName(DBG._ENV_ROOT[v], v)
 			end
 
 			for i,v in ipairs {
@@ -203,7 +210,7 @@ return function(DBG)
 						(" (" .. shortSrc .. ":" .. DBG._tostring(linedefined) .. ")")
 
 					if v or hardnames[f] then
-						v = "function: "..(hardnames[f] or v)..location
+						v = "function: " .. (hardnames[f] or v) .. location
 						if hardnames[f] then hardnames[f] = nil end
 					else
 						local __tostring = funcMeta.__tostring
@@ -224,15 +231,35 @@ return function(DBG)
 
 			DBG.printColor(DBG.color.blue, "\tAdded " .. DBG._tostring(amount) .. " function names for predefined functions, totalling " .. DBG._tostring(bytes) .. " characters.")
 		else
-			DBG._prettyFunctions = false
+			prettyFunctions = false
 		end
 
 		debug.setmetatable(function() end, funcMeta)
 	end
 
+	-- Disallows function indexing
+	function DBG.disallowFunctionIndex()
+		DBG.printColor(DBG.color.red, "\tIndexing functions has been disabled.")
+
+		indexFunctions = false
+		prettyFunctions = false
+
+		debug.setmetatable(function() end, nil)
+	end
+
+	-- Returns whether function indexing is allowed
+	function DBG.isFunctionIndexAllowed()
+		return indexFunctions
+	end
+
+	-- Returns whether there are pretty function names
+	function DBG.hasPrettyFunctionNames()
+		return prettyFunctions
+	end
+
 	-- Monitors changes to the global environment
 	function DBG.monitorGlobal(writeTo)
-		if type(writeTo) ~= "string" then writeTo = "_G (log).txt" end
+		if type(writeTo) ~= "string" then writeTo = DBG._ENV_ROOT_PATH .. " (log).txt" end
 
 		DBG.printColor(DBG.color.red, "\tNow monitoring the global environment for changes.\nWill be logged to '"..writeTo.."'.")
 
@@ -247,7 +274,7 @@ return function(DBG)
 
 		local traceback = debug.traceback
 
-		setmetatable(_G, {
+		setmetatable(DBG._ENV_ROOT, {
 			__newindex = function(t, k, v)
 				if DBG.notInDebugger() then
 					local msg = "New global defined: " .. DBG._tostring(k) .. "=" .. DBG._tostring(v) .. " (type " .. DBG.typeReal(v) .. ")"
@@ -273,6 +300,13 @@ return function(DBG)
 		})
 	end
 
+	-- Stops monitoring the global environment
+	function DBG.stopMonitorGlobal()
+		DBG.printColor(DBG.color.red, "\tNo longer monitoring the global environment for changes.")
+
+		setmetatable(DBG._ENV_ROOT, nil)
+	end
+
 	-- Views locals at a certain point in code execution
 	function DBG.viewLocals(src, inLine, var, key)
 		if src == nil then
@@ -285,7 +319,7 @@ return function(DBG)
 
 			local storage, storeKey
 			if key == nil then
-				storage = _G
+				storage = DBG._ENV_ROOT
 				storeKey = var or "_local"
 			else
 				storage = var
@@ -340,15 +374,12 @@ return function(DBG)
 		if thread then
 			stack = stack or 0
 
-			local _getinfo = debug.getinfo
-			local _getlocal = debug.getlocal
-
 			getinfo = function(depth, what)
-				return _getinfo(thread, depth, what)
+				return debug.getinfo(thread, depth, what)
 			end
 
 			getlocal = function(depth, index)
-				return _getlocal(thread, depth, index)
+				return debug.getlocal(thread, depth, index)
 			end
 		else
 			stack = (stack or 1) + 1
@@ -359,9 +390,11 @@ return function(DBG)
 
 		local var = {}
 
-		local function realvalue(value)
+		local function nonNilValue(value)
 			return rawequal(value, nil) and DBG.fakeNil or value
 		end
+
+		local multiLocal = { __index = { type = "multiLocal" } }
 
 		local i=0
 		local stackInfo = getinfo(stack, "fn")
@@ -379,14 +412,14 @@ return function(DBG)
 				if not name then break end
 				if name:find("^%(") then
 					if rawequal(this[name], nil) then
-						this[name] = realvalue(value)
-					elseif type(this[name]) ~= "table" then
-						this[name] = { this[name] }
+						this[name] = nonNilValue(value)
+					elseif getmetatable(this[name]) ~= multiLocal then
+						this[name] = setmetatable({ this[name] }, multiLocal)
 					else
-						this[name][#this[name]+1] = realvalue(value)
+						this[name][#this[name]+1] = nonNilValue(value)
 					end
 				else
-					this[name] = realvalue(value)
+					this[name] = nonNilValue(value)
 				end
 				l = l + 1
 			end

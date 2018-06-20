@@ -28,7 +28,7 @@ return function(DBG)
 
 		-- Get locals on stack
 		_stackLocals = DBG.getStack(stack)
-		if not DBG._indexFunctions then
+		if not DBG.isFunctionIndexAllowed() then
 			DBG.allowFunctionIndex(true)
 		end
 
