@@ -55,7 +55,7 @@ return function(DBG)
 
 		local funcMeta = {
 			__index = function(f, k)
-				if DBG.notInDebugger() then error("attempt to index a function value", 2) end
+				if DBG._notInDebugger() then error("attempt to index a function value", 2) end
 
 				local fup = getlist(f)
 
@@ -276,7 +276,7 @@ return function(DBG)
 
 		setmetatable(DBG._ENV_ROOT, {
 			__newindex = function(t, k, v)
-				if DBG.notInDebugger() then
+				if DBG._notInDebugger() then
 					local msg = "New global defined: " .. DBG._tostring(k) .. "=" .. DBG._tostring(v) .. " (type " .. DBG.typeReal(v) .. ")"
 					DBG.printColor(DBG.color.blue, msg)
 
@@ -287,7 +287,7 @@ return function(DBG)
 				rawset(t, k, v)
 			end,
 			__index = function(t, k)
-				if DBG.notInDebugger() then
+				if DBG._notInDebugger() then
 					local msg = "Trying to access undefined global: " .. DBG._tostring(k)
 					DBG.printColor(DBG.color.blue, msg)
 

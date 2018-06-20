@@ -159,7 +159,7 @@ return function(DBG)
 		}
 
 		-- Returns whether the scope is outside of the DBG
-		function DBG.notInDebugger()
+		function DBG._notInDebugger()
 			return not sources[debug.getinfo(3, "S").source]
 		end
 
