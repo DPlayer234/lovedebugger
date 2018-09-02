@@ -24,7 +24,7 @@ return function(DBG)
 
 		-- Get traceback message
 		_stackTraceback = debug.traceback(message, stack)
-		DBG.printColor(DBG.color.red, _stackTraceback)
+		DBG.printError(_stackTraceback)
 
 		-- Get locals on stack
 		_stackLocals = DBG.getStack(stack)

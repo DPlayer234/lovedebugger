@@ -45,7 +45,7 @@ return function(DBG)
 	-- Executes Lua code as the console would
 	function DBG.executeLuaCode(luaCode)
 		-- Attempting return to print that on the screen
-		DBG.printColor(DBG.color.yellow, ">> " .. luaCode)
+		DBG.printLog(">> " .. luaCode)
 
 		local r = { loadstring("local getmetatable=...;return " .. luaCode, DBG._LOADSTRING_SRC) }
 		if not r[1] then
@@ -64,11 +64,11 @@ return function(DBG)
 					r[i] = "[" .. DBG._tostring(i-1) .. "] (" .. DBG._validateUtf8(DBG.typeReal(v)) .. ") " .. DBG._validateUtf8(DBG._toSingleLine(DBG._toDisplayString(v)))
 				end
 				if #r > 0 then
-					DBG.printColor(DBG.color.yellow, table.concat(r, "\n\t"))
+					DBG.printLog(table.concat(r, "\n\t"))
 				end
 			end
 		else
-			DBG.printColor(DBG.color.red, ":ERROR:" .. DBG._tostring(r[2]))
+			DBG.printError(":ERROR:" .. DBG._tostring(r[2]))
 		end
 	end
 
@@ -134,15 +134,15 @@ return function(DBG)
 
 				local s,out = pcall(this.func, unpack(args))
 				if s then
-					DBG.printColor(DBG.color.yellow, out or ":Executed.")
+					DBG.printLog(out or ":Executed.")
 				else
-					DBG.printColor(DBG.color.red, ":ERROR:" .. DBG._tostring(out))
+					DBG.printError(":ERROR:" .. DBG._tostring(out))
 				end
 			else
-				DBG.printColor(DBG.color.red, ":ERROR:Incorrect arguments...")
+				DBG.printError(":ERROR:Incorrect arguments...")
 			end
 		else
-			DBG.printColor(DBG.color.red, ":ERROR:Unknown command. Add commands with DBG.newCommand(name, args, function)")
+			DBG.printError(":ERROR:Unknown command. Add commands with DBG.newCommand(name, args, function)")
 		end
 	end
 

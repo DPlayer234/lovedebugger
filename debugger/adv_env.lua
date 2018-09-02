@@ -334,7 +334,7 @@ return function(DBG)
 				error("Argument #1 to DBG.viewLocals(src, inLine, var, key) must be a function or string!")
 			end
 			if type(inLine) ~= "number" then
-				DBG.printColor(DBG.color.red, "You need to pass the line to check in!")
+				DBG.printError("You need to pass the line to check in!")
 				return
 			end
 

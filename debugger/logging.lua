@@ -86,6 +86,16 @@ return function(DBG)
 		return proxyPrint(c, text)
 	end
 
+	-- Prints a log message
+	function DBG.printLog(text)
+		DBG.printColor(DBG.color.yellow, text)
+	end
+
+	-- Prints an error
+	function DBG.printError(text)
+		DBG.printColor(DBG.color.red, text)
+	end
+
 	-- Clearing print calls
 	function DBG.clear()
 		for k,v in next, lg do lg[k] = nil end

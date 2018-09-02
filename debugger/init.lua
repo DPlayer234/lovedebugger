@@ -28,6 +28,7 @@ loadModule "adv_env"
 loadModule "commands"
 loadModule "error_handler"
 loadModule "profile"
+loadModule "persist"
 
 local love = require "love"
 local love_graphics = require "love.graphics"
@@ -61,9 +62,11 @@ setmetatable(DBG, {
 	__call = function(self)
 		-- Auto-Injection
 		self.registerHandlers()
+		self.loadPersistent()
 
 		local love_update = love.update
 		local love_draw = love.draw
+		local love_quit = love.quit
 
 		love.update = love_update and function(...)
 			self.safeUpdate(...)
@@ -74,6 +77,11 @@ setmetatable(DBG, {
 			love_draw(...)
 			self.safeDraw()
 		end or self.safeDraw
+
+		love.quit = love_quit and function(...)
+			self.savePersistent()
+			return love_quit()
+		end or self.savePersistent
 
 		return self
 	end

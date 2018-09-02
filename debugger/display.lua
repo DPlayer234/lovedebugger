@@ -87,10 +87,10 @@ return function(DBG)
 				end
 			]]
 			DBG._getAdditionalInfo = loadstring(code, DBG._LOADSTRING_SRC)(pcall, unpack(varFunc))
-			DBG.printColor(DBG.color.yellow, ":Set custom Var. Display.")
+			DBG.printLog(":Set custom Var. Display.")
 		else
 			DBG._getAdditionalInfo = function() end
-			DBG.printColor(DBG.color.yellow, ":Reset Var. Display.")
+			DBG.printLog(":Reset Var. Display.")
 		end
 	end
 

@@ -14,6 +14,7 @@ return function(DBG)
 	DBG.maxStorage   = 100    -- How many console inputs are stored to be reused (by using 'Up' and 'Down' arrow keys). (Default: 100)
 	DBG.useTitleBar  = true   -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar. (Default: true)
 	DBG.replaceTabs  = "    " -- Replace tab character in prints with the specified string.
+	DBG.identity     = "DBG"  -- The identity of the debugger. Used for saving persistent state. (Default: DBG)
 
 	DBG.color = {             -- Various colors used
 		-- Active:

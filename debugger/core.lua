@@ -151,6 +151,17 @@ return function(DBG)
 		end
 	end
 
+	-- Returns the command history as a list of strings
+	function DBG.getHistory()
+		local history = {}
+
+		for i=1, #DBG._lastInput do
+			history[i] = table.concat(DBG._lastInput[i])
+		end
+
+		return history
+	end
+
 	do
 		local getinfo = debug.getinfo
 
