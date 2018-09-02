@@ -8,15 +8,10 @@ return function(DBG)
 	local utf8 = require "utf8"
 	local love_filesystem = require "love.filesystem"
 
-	local HISTORY_PATH = "HISTORY" --#const
-
-	-- Runs the given function within it's own identity
-	function DBG._inOwnIdentity(func)
-		local identity = love_filesystem.getIdentity()
-		love_filesystem.setIdentity(DBG.identity)
-		xpcall(func, DBG.printError)
-		love_filesystem.setIdentity(identity)
-	end
+	local HISTORY_NAME = "DBG_HISTORY" --#const
+	local SAVE_DIR = love_filesystem.getSaveDirectory() --#const
+	local CUR_IDENTITY = love_filesystem.getIdentity() --#const
+	local HISTORY_PATH = SAVE_DIR:gsub(CUR_IDENTITY .. "$", "") .. "/" .. HISTORY_NAME --#const
 
 	-- Splits a string into a char array
 	local function toCharArray(string)
@@ -29,7 +24,8 @@ return function(DBG)
 
 	-- Saves the persistent state
 	local function savePersistent()
-		local hFile = assert(love_filesystem.newFile(HISTORY_PATH, "w"))
+		love_filesystem.createDirectory("")
+		local hFile = assert(io.open(HISTORY_PATH, "wb"))
 
 		local history = DBG.getHistory()
 
@@ -43,12 +39,12 @@ return function(DBG)
 
 	-- Loads the persistent state
 	local function loadPersistent()
-		if love_filesystem.getInfo("history", "file") == nil then return end
+		local hFile = io.open(HISTORY_PATH, "rb")
 
-		local hFile = assert(love_filesystem.newFile(HISTORY_PATH, "r"))
+		if not hFile then return end
 
 		for line in hFile:lines() do
-			DBG._lastInput[#DBG._lastInput + 1] = toCharArray(line)
+			DBG._lastInput[#DBG._lastInput + 1] = toCharArray(line:gsub("[\r\n]*", ""))
 		end
 
 		hFile:close()
@@ -56,11 +52,11 @@ return function(DBG)
 
 	-- Saves the persistent state
 	function DBG.savePersistent()
-		DBG._inOwnIdentity(savePersistent)
+		xpcall(savePersistent, DBG.printError)
 	end
 
 	-- Loads the persistent state
 	function DBG.loadPersistent()
-		DBG._inOwnIdentity(loadPersistent)
+		xpcall(loadPersistent, DBG.printError)
 	end
 end
