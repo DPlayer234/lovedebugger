@@ -193,12 +193,17 @@ debugger.disallowFunctionIndex()
 local allowed = debugger.isFunctionIndexAllowed()
 -- Returns whether function indexing is allowed.
 
-debugger.monitorGlobal([writeTo])
+debugger.monitorGlobal([options])
 -- Enables monitoring the global environment for unusual changes or activities
 -- (by which I mean, new definitions, accessing unused variables etc.).
--- Direct access (e.g. _G.myGlobalVar) is ignored.
--- 'writeto' is the file path (within the Löve save directory) to write the output to.
--- Defaults to 'env (log).txt'.
+-- This writes a log file to "ENV.txt"
+-- options is a table, keys being the names of global variables and the values
+-- being either DBG.MONITOR_UNDEFINED, DBG.MONITOR_CONSTANT or DBG.MONITOR_DYNAMIC
+-- to define what a variable is. DBG.MONITOR_CONSTANT may be assigned to once,
+-- DBG.MONITOR_DYNAMIC can be both accessed and assigned as often as wanted and
+-- DBG.MONITOR_UNDEFINED may neither be accessed or assigned.
+-- DBG.MONITOR_CONSTANT is implicitly set for all current global variables and
+-- DBG.MONITOR_UNDEFINED is implicitly set for all not set values.
 
 debugger.stopMonitorGlobal()
 -- Stops monitoring the global environment.

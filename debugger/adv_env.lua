@@ -6,307 +6,127 @@ as published by Sam Hocevar. See the COPYING file for more details.
 ]]
 return function(DBG)
 	local debug = require "debug"
-	local assert, setmetatable, next, type, ipairs, pairs, pcall, rawequal = assert, setmetatable, next, type, ipairs, pairs, pcall, rawequal
+	local assert, setmetatable, next, type, ipairs, pairs, pcall, rawset, rawequal, setfenv, getfenv = assert, setmetatable, next, type, ipairs, pairs, pcall, rawset, rawequal, setfenv, getfenv
 
-	local indexFunctions = false
-	local prettyFunctions = false
+	DBG.MONITOR_UNDEFINED = -1
+	DBG.MONITOR_CONSTANT  =  0
+	DBG.MONITOR_DYNAMIC   =  1
 
-	DBG.FUNCTION_CODE = "DBG.FUNCTION_CODE"
-	DBG.FUNCTION_UPVALUES = "DBG.FUNCTION_UPVALUES"
-	DBG.FUNCTION_UPVALUE_NAMES = "DBG.FUNCTION_UPVALUE_NAMES"
+	local MONITOR_FILE_NAME = "ENV.txt" --#const
 
-	-- Up-Value-getter
-	function DBG.allowFunctionIndex(prettyNames)
-		DBG.printColor(DBG.color.red, "\tAllowing the indexing of functions!\nAccess to indexing is only allowed within the command line.")
-		indexFunctions = true
-
-		local filesystem = require("love.filesystem")
-		local isFile = function(path)
-			local info = filesystem.getInfo(path)
-			return info and info.type == "file"
-		end
-
-		local upval = setmetatable({}, {__mode = "kv"})
-		local ret = setmetatable({}, {__mode = "kv", __index = function()return{}end})
-		local retn = setmetatable({}, {__mode = "kv"})
-
-		local isVarName = function(name)
-			return name:find("^[_a-zA-Z][_a-zA-Z0-9]*$") and true
-		end
-
-		local getlist = function(f)
-			if upval[f] then
-				return upval[f]
-			else
-				local fup = {}
-
-				local i = 1
-				local k, v = debug.getupvalue(f, i)
-				while k do
-					fup[isVarName(k) and k or i] = i
-					i = i + 1
-					k, v = debug.getupvalue(f, i)
-				end
-
-				upval[f] = fup
-				return fup
-			end
-		end
-
-		local funcMeta = {
-			__index = function(f, k)
-				if DBG._notInDebugger() then error("attempt to index a function value", 2) end
-
-				local fup = getlist(f)
-
-				if k == DBG.FUNCTION_UPVALUES then
-					local t = ret[f]
-					local _
-					for k,v in next, fup do _, t[k] = debug.getupvalue(f, v) end
-					return t
-				elseif k == DBG.FUNCTION_UPVALUE_NAMES then
-					if retn[f] then
-						return retn[f]
-					else
-						local t = {}
-						for k,v in next, fup do t[k] = true end
-						retn[f] = t
-						return t
-					end
-				elseif k == DBG.FUNCTION_CODE then
-					if debug.getinfo then
-						local info = debug.getinfo(f, "S")
-						local source = (info.source or ""):gsub("^@", "")
-						if isFile(source) then
-							local i = 0
-							local codelines = {}
-							for line in filesystem.lines(source) do
-								i = i + 1
-								-- linedefined, lastlinedefined, params
-								if i >= info.linedefined then
-									codelines[#codelines+1] = line
-									if i >= info.lastlinedefined then
-										break
-									end
-								end
-							end
-
-							return table.concat(codelines, "\n")
-						else
-							error("unable to find code file")
-						end
-					else
-						error("Cannot get code... No JIT utils?")
-					end
-				elseif fup[k] then
-					local k, v = debug.getupvalue(f, fup[k])
-					return v
-				else
-					error("attempt to get invalid upvalue", 2)
-				end
-			end,
-			__newindex = function(f, k, v)
-				local fup = getlist(f)
-				if fup[k] then
-					debug.setupvalue(f, fup[k], v)
-				else
-					error("attempt to set invalid upvalue", 2)
-				end
-			end,
-			--__metatable = false
-		}
-
-		if prettyNames and debug.getinfo then
-			prettyFunctions = true
-
-			local amount, bytes = 1, 5
-			local hardnames = {
-				[DBG.realPrint] = "print"
-			}
-
-			local indexed = {
-				[DBG._envRoot] = true,
-				[package.loaded] = true,
-				[package.preload] = true
-			}
-
-			local function addName(item, path)
-				if indexed[item] or hardnames[item] then return end
-				if type(item) == "table" then
-					indexed[item] = true
-					for k, v in next, item do
-						if type(k) == "string" then
-							addName(v, path .. "." .. k)
-						end
-					end
-				elseif type(item) == "function" then
-					hardnames[item] = path
-					amount = amount + 1
-					bytes = bytes + #path
-				end
-			end
-
-			for i,v in ipairs {
-				"assert", "collectgarbage", "dofile", "error", "gcinfo", "getfenv", "getmetatable", "ipairs", "load", "loadfile", "loadstring",
-				"module", "newproxy", "next", "pairs", "pcall", "rawequal", "rawget", "rawset", "require", "select",
-				"setfenv", "setmetatable", "type", "tonumber", "tostring", "unpack", "xpcall",
-				"coroutine", "debug", "io", "math", "os", "string", "table", "package"
-			} do
-				addName(DBG._envRoot[v], v)
-			end
-
-			for i,v in ipairs {
-				"bit", "jit", "love"
-			} do
-				local s, r = pcall(require, v)
-				if s then
-					addName(r, v)
-				end
-			end
-
-			do
-				local ffi = require "ffi"
-
-				addName(ffi, "ffi")
-				addName(debug.getmetatable(ffi.new("int")), "<cdata>")
-			end
-
-			addName(DBG, DBG._PATH)
-
-			local names = setmetatable({}, {
-				__index = function(t, f)
-					local v
-
-					local info = debug.getinfo(f, "S")
-					local source = (info.source or ""):gsub("^@", "")
-					local linedefined = info.linedefined
-					if isFile(source) and linedefined then
-						local i = 0
-						local defined
-						for line in filesystem.lines(source) do
-							i = i + 1
-							-- linedefined, lastlinedefined, params
-							if i >= linedefined then
-								defined = " "..line.." "
-								break
-							end
-						end
-						if defined then
-							v = defined:match("%)%-%-%[%[(.-)%]%]")
-								or defined:match("[^_a-zA-Z0-9]function%s+([_a-zA-Z][%.%:_a-zA-Z0-9]*)[^_a-zA-Z0-9]")
-								or defined:match("[^_a-zA-Z0-9]([_a-zA-Z][%.%:_a-zA-Z0-9]*)%s*=%s*%(*function[^_a-zA-Z0-9]")
-							if not v then
-								local __tostring = funcMeta.__tostring
-								funcMeta.__tostring = nil
-								v = DBG._tostring(f):match("0x%x+")
-								funcMeta.__tostring = __tostring
-							end
-						end
-					end
-
-					local shortSrc = info.short_src
-					local location =
-						shortSrc == "[C]" and (" [C]") or
-						(" (" .. shortSrc .. ":" .. DBG._tostring(linedefined) .. ")")
-
-					if v or hardnames[f] then
-						v = "function: " .. (hardnames[f] or v) .. location
-						if hardnames[f] then hardnames[f] = nil end
-					else
-						local __tostring = funcMeta.__tostring
-						funcMeta.__tostring = nil
-						v = DBG._tostring(f) .. location
-						funcMeta.__tostring = __tostring
-					end
-
-					t[f] = v
-					return v
-				end,
-				__mode = "kv"
-			})
-
-			function funcMeta:__tostring()
-				return names[self]
-			end
-
-			DBG.printColor(DBG.color.blue, "\tAdded " .. DBG._tostring(amount) .. " function names for predefined functions, totalling " .. DBG._tostring(bytes) .. " characters.")
-		else
-			prettyFunctions = false
-		end
-
-		debug.setmetatable(function() end, funcMeta)
-	end
-
-	-- Disallows function indexing
-	function DBG.disallowFunctionIndex()
-		DBG.printColor(DBG.color.red, "\tIndexing functions has been disabled.")
-
-		indexFunctions = false
-		prettyFunctions = false
-
-		debug.setmetatable(function() end, nil)
-	end
-
-	-- Returns whether function indexing is allowed
-	function DBG.isFunctionIndexAllowed()
-		return indexFunctions
-	end
-
-	-- Returns whether there are pretty function names
-	function DBG.hasPrettyFunctionNames()
-		return prettyFunctions
-	end
+	-- The monitored environment and output file
+	local monitorEnvProxy, monitorEnv, monitorFile
 
 	-- Monitors changes to the set global environment.
 	-- Direct access (e.g. _G.myGlobalVar) are ignored.
-	-- This is effectively overriden when DBG.setEnv(env, [envName]) is called afterwards.
-	function DBG.monitorGlobal(writeTo)
-		if type(writeTo) ~= "string" then writeTo = DBG._envRootName .. " (log).txt" end
-
-		DBG.printColor(DBG.color.red, "\tNow monitoring the '" .. DBG._envRootName .. "' for changes.\nWill be logged to '"..writeTo.."'.")
-
-		local writeToInfo = love.filesystem.getInfo(writeTo)
+	function DBG.monitorGlobal(options)
+		local writeToInfo = love.filesystem.getInfo(MONITOR_FILE_NAME)
 		if not writeToInfo then
-			love.filesystem.write(writeTo, "")
+			love.filesystem.write(MONITOR_FILE_NAME, "")
 		elseif writeToInfo.type ~= "file" then
-			error("Can only write log to files.")
+			error(MONITOR_FILE_NAME + " exists but is not a file.")
 		end
 
-		local file = love.filesystem.newFile(writeTo, "a")
+		options = options and DBG._mapTable(options, function(k, v)
+			if v ~= DBG.MONITOR_UNDEFINED and v ~= DBG.MONITOR_CONSTANT and v ~= DBG.MONITOR_DYNAMIC then
+				error("'options' can only contain DBG.MONITOR_* enums as values.")
+			end
 
+			return v
+		end) or {}
+
+		DBG.stopMonitorGlobal(false)
+		DBG._completeMonitorOptions(options, DBG._envRoot)
+		local file = love.filesystem.newFile(MONITOR_FILE_NAME, "a")
+
+		DBG.printColor(DBG.color.red, ("\tNow monitoring '%s' for changes.\nWill be logged to '%s'."):format(DBG._envRootPath, MONITOR_FILE_NAME))
+
+		DBG._setMonitorEnv(DBG._envRoot, file, options)
+	end
+
+	-- Completes the options for monitoring based on another table
+	function DBG._completeMonitorOptions(options, with)
+		for k, v in pairs(with) do
+			if options[k] == nil then
+				options[k] = DBG.MONITOR_CONSTANT
+			end
+		end
+
+		setmetatable(options, {
+			__index = function()
+				return DBG.MONITOR_UNDEFINED
+			end
+		})
+	end
+
+	-- Sets the monitoring environment
+	function DBG._setMonitorEnv(env, file, options)
 		local traceback = debug.traceback
 
-		setmetatable(DBG._envRoot, {
-			__newindex = function(t, k, v)
-				if DBG._notInDebugger() then
-					local msg = "New global defined: " .. DBG._tostring(k) .. "=" .. DBG._tostring(v) .. " (type " .. DBG.typeReal(v) .. ")"
-					DBG.printColor(DBG.color.blue, msg)
+		local envProxy = DBG._cloneObject(env)
+		setmetatable(envProxy, debug.getmetatable(env))
 
-					local tb = traceback(msg, 2)
-					file:write(tb.."\n\n")
-					file:flush()
-				end
-				rawset(t, k, v)
-			end,
+		for k, v in pairs(env) do
+			rawset(env, k, nil)
+		end
+
+		monitorFile     = file
+		monitorEnvProxy = envProxy
+		monitorEnv      = env
+
+		if env == DBG._envRoot then
+			DBG.setEnv(envProxy, DBG._envPath)
+		end
+
+		setmetatable(env, {
 			__index = function(t, k)
-				if DBG._notInDebugger() then
-					local msg = "Trying to access undefined global: " .. DBG._tostring(k)
-					DBG.printColor(DBG.color.blue, msg)
-
-					local tb = traceback(msg, 2)
-					file:write(tb.."\n\n")
+				if options[k] < DBG.MONITOR_CONSTANT and DBG._notInDebugger() then
+					local message = (":Undefined global '%s' was attempted to be accessed!"):format(k)
+					DBG.printColor(DBG.color.blue, message)
+					file:write(traceback(message, 2) .. "\n\n")
 					file:flush()
 				end
-				return nil
+
+				return envProxy[k]
+			end,
+			__newindex = function(t, k, v)
+				if (options[k] < DBG.MONITOR_CONSTANT or (options[k] == DBG.MONITOR_CONSTANT and envProxy[k] ~= nil)) and DBG._notInDebugger() then
+					local message = (":Non-dynamic global '%s' was set to: %s"):format(k, v)
+					DBG.printColor(DBG.color.blue, message)
+					file:write(traceback(message, 2) .. "\n\n")
+					file:flush()
+				end
+
+				envProxy[k] = v
 			end
 		})
 	end
 
 	-- Stops monitoring the global environment
-	function DBG.stopMonitorGlobal()
-		DBG.printColor(DBG.color.red, "\tNo longer monitoring the global environment for changes.")
+	function DBG.stopMonitorGlobal(log)
+		if DBG.doesMonitorGlobal() then
+			monitorFile:close()
+			monitorFile = nil
 
-		setmetatable(DBG._envRoot, nil)
+			if log or log == nil then
+				DBG.printColor(DBG.color.red, "\tNo longer monitoring the global environment for changes.")
+			end
+
+			setmetatable(monitorEnv, debug.getmetatable(monitorEnvProxy))
+			for k, v in pairs(monitorEnvProxy) do
+				rawset(monitorEnv, k, v)
+			end
+
+			if monitorEnvProxy == DBG._envRoot then
+				DBG.setEnv(monitorEnv, DBG._envPath)
+			end
+
+			monitorEnvProxy, monitorEnv = nil
+		end
+	end
+
+	function DBG.doesMonitorGlobal()
+		return monitorFile ~= nil
 	end
 
 	-- Views locals at a certain point in code execution
