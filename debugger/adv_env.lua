@@ -125,7 +125,7 @@ return function(DBG)
 			}
 
 			local indexed = {
-				[DBG._ENV_ROOT] = true,
+				[DBG._envRoot] = true,
 				[package.loaded] = true,
 				[package.preload] = true
 			}
@@ -152,7 +152,7 @@ return function(DBG)
 				"setfenv", "setmetatable", "type", "tonumber", "tostring", "unpack", "xpcall",
 				"coroutine", "debug", "io", "math", "os", "string", "table", "package"
 			} do
-				addName(DBG._ENV_ROOT[v], v)
+				addName(DBG._envRoot[v], v)
 			end
 
 			for i,v in ipairs {
@@ -257,11 +257,13 @@ return function(DBG)
 		return prettyFunctions
 	end
 
-	-- Monitors changes to the global environment
+	-- Monitors changes to the set global environment.
+	-- Direct access (e.g. _G.myGlobalVar) are ignored.
+	-- This is effectively overriden when DBG.setEnv(env, [envName]) is called afterwards.
 	function DBG.monitorGlobal(writeTo)
-		if type(writeTo) ~= "string" then writeTo = DBG._ENV_ROOT_PATH .. " (log).txt" end
+		if type(writeTo) ~= "string" then writeTo = DBG._envRootName .. " (log).txt" end
 
-		DBG.printColor(DBG.color.red, "\tNow monitoring the global environment for changes.\nWill be logged to '"..writeTo.."'.")
+		DBG.printColor(DBG.color.red, "\tNow monitoring the '" .. DBG._envRootName .. "' for changes.\nWill be logged to '"..writeTo.."'.")
 
 		local writeToInfo = love.filesystem.getInfo(writeTo)
 		if not writeToInfo then
@@ -274,7 +276,7 @@ return function(DBG)
 
 		local traceback = debug.traceback
 
-		setmetatable(DBG._ENV_ROOT, {
+		setmetatable(DBG._envRoot, {
 			__newindex = function(t, k, v)
 				if DBG._notInDebugger() then
 					local msg = "New global defined: " .. DBG._tostring(k) .. "=" .. DBG._tostring(v) .. " (type " .. DBG.typeReal(v) .. ")"
@@ -304,7 +306,7 @@ return function(DBG)
 	function DBG.stopMonitorGlobal()
 		DBG.printColor(DBG.color.red, "\tNo longer monitoring the global environment for changes.")
 
-		setmetatable(DBG._ENV_ROOT, nil)
+		setmetatable(DBG._envRoot, nil)
 	end
 
 	-- Views locals at a certain point in code execution
@@ -319,7 +321,7 @@ return function(DBG)
 
 			local storage, storeKey
 			if key == nil then
-				storage = DBG._ENV_ROOT
+				storage = DBG._envRoot
 				storeKey = var or "_local"
 			else
 				storage = var

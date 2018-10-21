@@ -7,7 +7,7 @@ as published by Sam Hocevar. See the COPYING file for more details.
 return function(DBG)
 	local debug = require "debug"
 
-	local assert, type, next, tonumber, pcall, unpack, loadstring, next = assert, type, next, tonumber, pcall, unpack, loadstring, next
+	local assert, type, next, tonumber, pcall, unpack, next = assert, type, next, tonumber, pcall, unpack, next
 	local string, table = string, table
 
 	local commands = {}
@@ -47,12 +47,12 @@ return function(DBG)
 		-- Attempting return to print that on the screen
 		DBG.printLog(">> " .. luaCode)
 
-		local r = { loadstring("local getmetatable=...;return " .. luaCode, DBG._LOADSTRING_SRC) }
+		local r = { DBG.loadString("return " .. luaCode) }
 		if not r[1] then
-			r = { loadstring("local getmetatable=...;" .. luaCode, DBG._LOADSTRING_SRC) }
+			r = { DBG.loadString(luaCode) }
 		end
 		if r[1] then
-			r = { pcall(r[1], debug.getmetatable) }
+			r = { pcall(r[1]) }
 		end
 		if r[1] == true then
 			local max = 0
@@ -161,7 +161,7 @@ return function(DBG)
 
 	-- Quick navigation
 	DBG.newCommand("to", "", function()
-		DBG._navigateTo(DBG._ENV_ROOT_PATH)
+		DBG._navigateTo(DBG._envRootName)
 		return ":Moved to "..DBG._envPath.."."
 	end)
 

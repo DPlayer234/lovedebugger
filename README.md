@@ -161,6 +161,16 @@ local id = debugger.addUpdate(func, [priority])
 debugger.removeUpdate(id)
 -- Removes a function by ID from being called every frame.
 
+local env, envName = debugger.getEnv()
+-- Returns the current environment root. Defaults to _G, "env".
+
+debugger.setEnv(env, [envName])
+-- Replaces the root environment used by the debugger and the Lua prompt.
+-- envName is the display name of the environment.
+
+debugger.loadString(code)
+-- Loads code with the environment set to debugger.getEnv().
+
 debugger.allowFunctionIndex([nicer_name])
 -- Enables function indexing, allowing you to browse the upvalues
 -- of functions by Shift-Left-Clicking them in the environment.
@@ -186,8 +196,9 @@ local allowed = debugger.isFunctionIndexAllowed()
 debugger.monitorGlobal([writeTo])
 -- Enables monitoring the global environment for unusual changes or activities
 -- (by which I mean, new definitions, accessing unused variables etc.).
+-- Direct access (e.g. _G.myGlobalVar) is ignored.
 -- 'writeto' is the file path (within the Löve save directory) to write the output to.
--- Defaults to '_G (log).txt'.
+-- Defaults to 'env (log).txt'.
 
 debugger.stopMonitorGlobal()
 -- Stops monitoring the global environment.
@@ -341,8 +352,6 @@ If you want the profiler's reports to use the function name returned by tostring
 ## Other Things
 
 * The environment location at the top may glitch out and not tell you an entirely correct path if unexpected key names are used.
-* It always uses 'debug.getmetatable' rather than 'getmetatable'. Therefore it can access metatables even if those have a '\_\_metatable' key.
-* The variable 'getmetatable' is overriden by 'debug.getmetatable' within the Lua prompt.
 * This tool monkey-patches Lua's 'print' (but not 'io.write') function. The original function is stored as 'debugger.realPrint'.
 * It will attempt to require "(require-path).font", which it expects to return a Font to use, on load. If it finds such a file, and it does not return a Font, it may crash.
 

@@ -86,7 +86,7 @@ return function(DBG)
 					return ]] .. varList .. [[
 				end
 			]]
-			DBG._getAdditionalInfo = loadstring(code, DBG._LOADSTRING_SRC)(pcall, unpack(varFunc))
+			DBG._getAdditionalInfo = loadstring(code, DBG._LOAD_SRC)(pcall, unpack(varFunc))
 			DBG.printLog(":Set custom Var. Display.")
 		else
 			DBG._getAdditionalInfo = function() end

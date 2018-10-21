@@ -108,7 +108,7 @@ return function(DBG)
 					local newEnvPath = ""
 					local newType = type(newText)
 					if newType ~= "string" and newType ~= "number" then newText = DBG._tostring(newText) end
-					if DBG._envPath == DBG._ENV_ROOT_PATH then
+					if DBG._envPath == DBG._envRootName then
 						newEnvPath = newText
 					else
 						newEnvPath = DBG._envPath .. "[" .. DBG._toSingleLine(DBG._toDisplayString(newText)) .. "]"

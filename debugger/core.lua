@@ -10,17 +10,19 @@ return function(DBG)
 	local debug = require "debug"
 	local love_graphics = require "love.graphics"
 
-	local assert, pcall, next, type, rawequal, select = assert, pcall, next, type, rawequal, select
+	local assert, pcall, next, type, rawequal, select, load, setmetatable = assert, pcall, next, type, rawequal, select, load, setmetatable
 	local table = table
 
-	DBG._LOADSTRING_SRC = "DBG_SRC_STRING"
-	DBG._ENV_ROOT_PATH = "_G"
-	DBG._ENV_ROOT = _G
+	DBG._LOAD_SRC = "DBG_SRC_STRING"
+
+	DBG._envRootName = "env"
+	DBG._loadEnv = _G
+	DBG._envRoot = _G
 
 	DBG._textTable = {}
 	DBG._textPosition = 0
 
-	DBG._envPath = DBG._ENV_ROOT_PATH
+	DBG._envPath = DBG._envRootName
 	DBG._yScroll = 1
 
 	DBG._ram = 0
@@ -32,9 +34,42 @@ return function(DBG)
 
 	DBG._hidden = setmetatable({}, { __mode = "k" })
 
+	-- Returns the current environment root.
+	function DBG.getEnv()
+		return DBG._envRoot, DBG._envRootName
+	end
+
+	-- Sets the root environment
+	function DBG.setEnv(env, envName)
+		assert(type(env) == "table", "Argument #1 to DBG.setEnv(env, envName) must be a table!")
+		if envName ~= nil then
+			assert(type(envName) == "string", "Argument #2 to DBG.setEnv(env, envName) must be a string or nil!")
+			assert((envName:find("[_a-zA-Z][_a-zA-Z0-9]+")), "Argument #2 to DBG.setEnv(env, envName) must be a valid variable name!")
+
+			DBG._envRootName = envName or "env"
+		end
+
+		DBG._envRoot = env
+
+		DBG._loadEnv = setmetatable({
+			META = debug.getmetatable
+		}, {
+			__index = env,
+			__newindex = env
+		})
+
+		DBG._envPath = DBG._envRootName
+	end
+
+	DBG.setEnv(_G)
+
 	-- Gets the currently navigated to value
 	function DBG._getDv(envPath)
-		local s, dv = pcall(loadstring("local getmetatable=... return "..envPath, DBG._LOADSTRING_SRC), debug.getmetatable)
+		if envPath == DBG._envRootName then
+			return DBG._envRoot
+		end
+
+		local s, dv = pcall(DBG.loadString("return " .. envPath))
 		if s then
 			return dv
 		else
@@ -52,6 +87,11 @@ return function(DBG)
 			return dv, DBG._sortedTable(dv[DBG.FUNCTION_UPVALUE_NAMES])
 		end
 		return dv
+	end
+
+	-- Loads a string with the debugger's environment
+	function DBG.loadString(code)
+		return load(code, DBG._LOAD_SRC, "t", DBG._loadEnv)
 	end
 
 	-- Hide fields of a certain table via pattern in the environment display
@@ -110,7 +150,7 @@ return function(DBG)
 		local m = debug.getmetatable(dv)
 
 		if type(m) == "table" then
-			DBG._navigateTo("getmetatable(" .. envPath .. ")")
+			DBG._navigateTo("META(" .. envPath .. ")")
 		end
 	end
 
@@ -119,8 +159,8 @@ return function(DBG)
 		repeat
 			local s = envPath
 
-			if s:find("^getmetatable%(.*%)$") then
-				envPath = s:sub(14, #s-1)
+			if s:find("^META%(.*%)$") then
+				envPath = s:sub(6, #s-1)
 			elseif s:find("%(%)$") then
 				envPath = s:sub(1, #s-2)
 			else
@@ -136,10 +176,10 @@ return function(DBG)
 				if r > 0 then
 					envPath = envPath:sub(1, r-1)
 				else
-					envPath = DBG._ENV_ROOT_PATH
+					envPath = DBG._envRootName
 				end
 			end
-		until envPath == DBG._ENV_ROOT_PATH or select(2, DBG._getDvIndex(envPath))
+		until envPath == DBG._envRootName or select(2, DBG._getDvIndex(envPath))
 
 		DBG._navigateTo(envPath)
 	end
@@ -166,7 +206,7 @@ return function(DBG)
 		local getinfo = debug.getinfo
 
 		local sources = {
-			[DBG._LOADSTRING_SRC] = true
+			[DBG._LOAD_SRC] = true
 		}
 
 		-- Returns whether the scope is outside of the DBG

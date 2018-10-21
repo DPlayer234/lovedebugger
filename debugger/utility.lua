@@ -19,6 +19,24 @@ return function(DBG)
 		return { unpack(t) }
 	end
 
+	-- Creates a flat copy of an object
+	function DBG._cloneObject(t)
+		local n = {}
+		for k, v in pairs(t) do
+			n[k] = v
+		end
+		return n
+	end
+
+	-- Calls f for every value in t and creates a new table with the return values mapped to the keys.
+	function DBG._mapTable(t, f)
+		local n = {}
+		for k, v in pairs(t) do
+			n[k] = f(k, v)
+		end
+		return n
+	end
+
 	-- P-called tostring
 	function DBG._tostring(t)
 		local s, r = pcall(tostring, t)

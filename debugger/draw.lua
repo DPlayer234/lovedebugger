@@ -107,7 +107,7 @@ return function(DBG)
 			local stringType, stringName, stringData, envPathType = DBG._getEnvStrings(w, h)
 
 			-- Variable Path
-			local path = (DBG._envPath == DBG._ENV_ROOT_PATH and "..." or "> " .. DBG._envPath):gsub("getmetatable%(", "Meta("):gsub("%[\"", " > "):gsub("\"%]", ""):gsub(" ", " ")
+			local path = (DBG._envRootName .. (DBG._envPath == DBG._envRootName and "" or " > " .. DBG._envPath)):gsub("%[\"", " > "):gsub("\"%]", ""):gsub(" ", " ")
 
 			if DBG._font:getWidth("\t" .. path) > w - tt then
 				while DBG._font:getWidth("\t…" .. path) > w-tt do
