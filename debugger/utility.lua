@@ -89,6 +89,12 @@ return function(DBG)
 		return t
 	end
 
+	-- Whether a value can be uniquely inferred from its string representation
+	function DBG.canBeInferred(value)
+		local t = type(value)
+		return t == "string" or t == "number" or t == "boolean" or value == nil
+	end
+
 	-- Gets the environment path as a string
 	function DBG.getEnvPath(nav, rootName)
 		local res = rootName or DBG._envRootName
@@ -106,8 +112,10 @@ return function(DBG)
 				else
 					res = ("%s[%q]"):format(res, navI.key)
 				end
-			else
+			elseif DBG.canBeInferred(navI.key) then
 				res = res .. "[" .. DBG._tostring(navI.key) .. "]"
+			else
+				res = ("%s[CACHE(%s, %q)]"):format(res, DBG._addToCache(navI.key), DBG._tostring(navI.key))
 			end
 		end
 

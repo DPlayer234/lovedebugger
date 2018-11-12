@@ -34,6 +34,10 @@ return function(DBG)
 
 	DBG._hidden = setmetatable({}, { __mode = "k" })
 
+	DBG._accessCache = setmetatable({}, { __mode = "v" })
+	DBG._accessCacheUse = setmetatable({}, { __mode = "k" })
+	DBG._accessCacheCount = 0
+
 	-- Returns the current environment root.
 	function DBG.getEnv()
 		return DBG._envRoot, DBG._envRootName
@@ -53,6 +57,7 @@ return function(DBG)
 
 		DBG._loadEnv = setmetatable({
 			META = debug.getmetatable,
+			CACHE = DBG._fetchFromCache,
 			[DBG._envRootName] = env
 		}, {
 			__index = env,
@@ -61,8 +66,6 @@ return function(DBG)
 
 		DBG._envNav = {}
 	end
-
-	DBG.setEnv(_G)
 
 	-- Gets a copy of the navigation list
 	function DBG._getEnvNavCopy()
@@ -152,6 +155,37 @@ return function(DBG)
 		return to
 	end
 
+	-- Adds a value to the access cache
+	function DBG._addToCache(value)
+		if DBG._accessCacheUse[value] then
+			return DBG._accessCacheUse[value]
+		end
+
+		local index = DBG._accessCacheCount
+		DBG._accessCache[index] = value
+		DBG._accessCacheUse[value] = index
+		DBG._accessCacheCount = DBG._accessCacheCount + 1
+		return index
+	end
+
+	-- Returns a value in the access cache based on its index
+	function DBG._fetchFromCache(index)
+		return DBG._accessCache[index]
+	end
+
+	-- Clears the access cache
+	function DBG._clearCache()
+		for index, _ in pairs(DBG._accessCache) do
+			DBG._accessCache[index] = nil
+		end
+
+		for value, _ in pairs(DBG._accessCacheUse) do
+			DBG._accessCacheUse[value] = nil
+		end
+
+		DBG._accessCacheCount = 0
+	end
+
 	-- Navigates one element relative to the current one
 	function DBG.navigate(action, arg)
 		DBG._navigate(DBG._envNav, action, arg)
@@ -239,5 +273,6 @@ return function(DBG)
 		DBG.fakeNil = ffi.new("struct nil")
 	end
 
+	DBG.setEnv(_G)
 	DBG.addSource()
 end

@@ -70,6 +70,8 @@ return function(DBG)
 		else
 			DBG.printError(":ERROR:" .. DBG._tostring(r[2]))
 		end
+
+		DBG._clearCache()
 	end
 
 	-- Executes a command
