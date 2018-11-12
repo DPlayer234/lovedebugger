@@ -232,10 +232,21 @@ return function(DBG)
 		local history = {}
 
 		for i=1, #DBG._lastInput do
-			history[i] = table.concat(DBG._lastInput[i])
+			history[i] = DBG._lastInput[i]
 		end
 
 		return history
+	end
+
+	-- Returns the current text in the prompt
+	function DBG._getPromptText()
+		return table.concat(DBG._textTable, "")
+	end
+
+	-- Sets the current text in the prompt
+	function DBG._setPromptText(str)
+		DBG._textTable = DBG._toCharArray(str)
+		DBG._textPosition = #DBG._textTable + 1
 	end
 
 	do

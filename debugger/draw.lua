@@ -24,14 +24,14 @@ return function(DBG)
 
 		love_graphics.setColor(DBG.color.fgActive)
 
-		local prompt = table.concat(DBG._textTable)
+		local prompt = DBG._getPromptText()
 		local width = DBG._font:getWidth(prompt)
 		local x = width < w and 0 or w - width
 
 		love_graphics.print(prompt, x, h - DBG._fontHeight)
 
 		if love_timer.getTime() % 0.5 >= 0.25 then
-			if DBG._textPosition > #DBG._textTable then
+			if DBG._textPosition > #prompt then
 				love_graphics.rectangle("fill", DBG._font:getWidth(prompt), h - DBG._fontHeight, DBG._font:getWidth(" "), DBG._fontHeight)
 			else
 				love_graphics.rectangle("fill",

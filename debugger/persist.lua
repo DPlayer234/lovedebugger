@@ -5,22 +5,12 @@ terms of the Do What The Fuck You Want To Public License, Version 2,
 as published by Sam Hocevar. See the COPYING file for more details.
 ]]
 return function(DBG)
-	local utf8 = require "utf8"
 	local love_filesystem = require "love.filesystem"
 
 	local HISTORY_NAME = "DBG_HISTORY" --#const
 	local SAVE_DIR = love.filesystem.getSaveDirectory()
 	local CUR_IDENTITY = love.filesystem.getIdentity()
 	local HISTORY_PATH = SAVE_DIR:sub(1, #SAVE_DIR - #CUR_IDENTITY) .. HISTORY_NAME
-
-	-- Splits a string into a char array
-	local function toCharArray(string)
-		local chars = {}
-		for p, c in utf8.codes(string) do
-			chars[#chars + 1] = utf8.char(c)
-		end
-		return chars
-	end
 
 	-- Saves the persistent state
 	local function savePersistent()
@@ -44,7 +34,7 @@ return function(DBG)
 		if not hFile then return end
 
 		for line in hFile:lines() do
-			DBG._lastInput[#DBG._lastInput + 1] = toCharArray(line:gsub("[\r\n]*", ""))
+			DBG._lastInput[#DBG._lastInput + 1] = line:gsub("[\r\n]*", "")
 		end
 
 		hFile:close()

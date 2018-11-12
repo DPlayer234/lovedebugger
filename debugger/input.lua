@@ -31,7 +31,7 @@ return function(DBG)
 					DBG._textPosition = DBG._textPosition - 1
 				end
 
-				while realKeyboard.isDown("lctrl", "rctrl") and DBG._textTable[DBG._textPosition-1] and DBG._textTable[DBG._textPosition-1]:find("%a") do
+				while realKeyboard.isDown("lctrl", "rctrl") and DBG._textTable[DBG._textPosition-1] and DBG._textTable[DBG._textPosition-1]:find("%w") do
 					table.remove(DBG._textTable, DBG._textPosition-1)
 					DBG._textPosition = DBG._textPosition - 1
 				end
@@ -41,7 +41,7 @@ return function(DBG)
 					table.remove(DBG._textTable, DBG._textPosition)
 				end
 
-				while realKeyboard.isDown("lctrl", "rctrl") and DBG._textTable[DBG._textPosition] and DBG._textTable[DBG._textPosition]:find("%a") do
+				while realKeyboard.isDown("lctrl", "rctrl") and DBG._textTable[DBG._textPosition] and DBG._textTable[DBG._textPosition]:find("%w") do
 					table.remove(DBG._textTable, DBG._textPosition)
 				end
 			end

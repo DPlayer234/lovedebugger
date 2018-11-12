@@ -62,6 +62,15 @@ return function(DBG)
 		return (DBG._tostring(value):gsub("\n", " "))
 	end
 
+	-- Splits a string into a char array
+	function DBG._toCharArray(string)
+		local chars = {}
+		for p, c in utf8.codes(string) do
+			chars[#chars + 1] = utf8.char(c)
+		end
+		return chars
+	end
+
 	-- Safely gets a value without calling anything
 	function DBG.safeIndex(table, key, depth)
 		depth = depth or 0

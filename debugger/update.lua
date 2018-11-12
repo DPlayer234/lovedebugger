@@ -34,7 +34,7 @@ return function(DBG)
 			end
 		elseif ((DBG.isDown("lctrl") or DBG.isDown("rctrl")) and DBG._keyboard.isDown("c"))
 		or (DBG._keyboard.isDown("lctrl", "rctrl") and DBG.isDown("c")) then
-			love_system.setClipboardText(table.concat(DBG._textTable, ""))
+			love_system.setClipboardText(DBG._getPromptText())
 		end
 	end
 
@@ -42,24 +42,16 @@ return function(DBG)
 	function DBG._handleConsoleCycle()
 		if DBG.isDown("up") then
 			if DBG._lastSelect < #DBG._lastInput then
-				if DBG._lastSelect == 0 and #DBG._textTable > 0 then
-					table.insert(DBG._lastInput, 1, DBG._textTable)
-					DBG._lastSelect = 2
-				else
-					DBG._lastSelect = DBG._lastSelect + 1
+				if DBG._lastSelect == 0 then
+					DBG._lastInput[0] = DBG._getPromptText()
 				end
-				DBG._textTable = DBG._cloneList(DBG._lastInput[DBG._lastSelect])
-				DBG._textPosition = #DBG._textTable+1
+				DBG._lastSelect = DBG._lastSelect + 1
+				DBG._setPromptText(DBG._lastInput[DBG._lastSelect])
 			end
 		elseif DBG.isDown("down") then
 			if DBG._lastSelect > 0 then
 				DBG._lastSelect = DBG._lastSelect - 1
-				if DBG._lastSelect == 0 then
-					DBG._textTable = {}
-				else
-					DBG._textTable = DBG._cloneList(DBG._lastInput[DBG._lastSelect])
-				end
-				DBG._textPosition = #DBG._textTable+1
+				DBG._setPromptText(DBG._lastInput[DBG._lastSelect] or "")
 			end
 		end
 	end
@@ -68,25 +60,35 @@ return function(DBG)
 	function DBG._handleCursorMovement()
 		if DBG.isDown("right") and DBG._textPosition <= #DBG._textTable then
 			DBG._textPosition = DBG._textPosition + 1
+
+			while DBG._keyboard.isDown("lctrl", "rctrl") and DBG._textPosition <= #DBG._textTable and DBG._textTable[DBG._textPosition]:find("%w") do
+				DBG._textPosition = DBG._textPosition + 1
+			end
 		elseif DBG.isDown("left") and DBG._textPosition > 1 then
 			DBG._textPosition = DBG._textPosition - 1
+
+			while DBG._keyboard.isDown("lctrl", "rctrl") and DBG._textPosition > 1 and DBG._textTable[DBG._textPosition]:find("%w") do
+				DBG._textPosition = DBG._textPosition - 1
+			end
 		end
 	end
 
 	-- Handling console execution.
 	function DBG._handleConsoleExecution()
 		if DBG.isDown("return") and #DBG._textTable > 0 then
-			local textInput = table.concat(DBG._textTable, "")
+			local textInput = DBG._getPromptText()
 
 			-- Storing current input to be reused
-			table.insert(DBG._lastInput, 1, DBG._textTable)
-			DBG._lastSelect = 0
-			if #DBG._lastInput > DBG.maxStorage then
-				table.remove(DBG._lastInput, #DBG._lastInput)
+			if textInput ~= DBG._lastInput[1] then
+				table.insert(DBG._lastInput, 1, textInput)
+				while #DBG._lastInput > DBG.maxStorage do
+					table.remove(DBG._lastInput, #DBG._lastInput)
+				end
 			end
 
 			DBG._textTable = {}
 			DBG._textPosition = 1
+			DBG._lastSelect = 0
 
 			if textInput:find("^[/\\!:%.%*]") then
 				-- A command. Has to be.
