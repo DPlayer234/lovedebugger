@@ -46,11 +46,6 @@ return function(DBG)
 	local fromPattern = "%[\"[_a-zA-Z][_a-zA-Z0-9]-\"%]"
 	local nicerPush = function(t) return "." .. t:sub(3, #t-2) end
 
-	-- Returns a nicer environment path
-	function DBG._nicerEnvPath(envPath)
-		return envPath:gsub(fromPattern, nicerPush)
-	end
-
 	-- Checks whether a utf8 string is valid and either returns it, having replaced all
 	-- null bytes with spaces or the error message
 	function DBG._validateUtf8(s)
@@ -92,6 +87,48 @@ return function(DBG)
 			if s and type(r) == "string" then return t .. ":" .. r end
 		end
 		return t
+	end
+
+	-- Gets the environment path as a string
+	function DBG.getEnvPath(nav, rootName)
+		local res = rootName or DBG._envRootName
+		nav = nav or DBG._envNav
+
+		for i=1, #nav do
+			local navI = nav[i]
+			if navI.meta then
+				res = "META(" .. res .. ")"
+			elseif type(navI.key) == "string" then
+				if navI.key:find("^[_A-Za-z][_A-Za-z0-9]+$") then
+					res = res == DBG._envRootName
+						and navI.key
+						or res .. "." .. navI.key
+				else
+					res = ("%s[%q]"):format(res, navI.key)
+				end
+			else
+				res = res .. "[" .. DBG._tostring(navI.key) .. "]"
+			end
+		end
+
+		return res
+	end
+
+	-- Gets the environment path as a nice, readable string
+	function DBG.getNiceEnvPath(nav)
+		local res = DBG._envRootName
+		nav = nav or DBG._envNav
+
+		for i=1, #nav do
+			local navI = nav[i]
+			if navI.meta then
+				res = res .. " (META)"
+			else
+				res = res .. " > " .. DBG._tostring(navI.key):gsub("[%s\n\r\v]", " ")
+			end
+		end
+
+		return res
 	end
 
 	DBG.addSource()

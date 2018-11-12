@@ -22,7 +22,7 @@ return function(DBG)
 	DBG._textTable = {}
 	DBG._textPosition = 0
 
-	DBG._envPath = DBG._envRootName
+	DBG._envNav = {}
 	DBG._yScroll = 1
 
 	DBG._ram = 0
@@ -52,34 +52,39 @@ return function(DBG)
 		DBG._envRoot = env
 
 		DBG._loadEnv = setmetatable({
-			META = debug.getmetatable
+			META = debug.getmetatable,
+			[DBG._envRootName] = env
 		}, {
 			__index = env,
 			__newindex = env
 		})
 
-		DBG._envPath = DBG._envRootName
+		DBG._envNav = {}
 	end
 
 	DBG.setEnv(_G)
 
+	-- Gets a copy of the navigation list
+	function DBG._getEnvNavCopy()
+		return DBG._cloneList(DBG._envNav)
+	end
+
 	-- Gets the currently navigated to value
-	function DBG._getDv(envPath)
-		if envPath == DBG._envRootName then
-			return DBG._envRoot
+	function DBG._getDv(nav)
+		local dv = DBG._envRoot
+		local ok
+
+		for i=1, #nav do
+			ok, dv = pcall(DBG._subGetDv, dv, nav[i])
+			if not ok then return nil end
 		end
 
-		local s, dv = pcall(DBG.loadString("return " .. envPath))
-		if s then
-			return dv
-		else
-			return nil
-		end
+		return dv
 	end
 
 	-- Gets the currently navigated to value and the index if valid
-	function DBG._getDvIndex(envPath)
-		local dv = DBG._getDv(envPath)
+	function DBG._getDvIndex(nav)
+		local dv = DBG._getDv(nav)
 		if type(dv) == "table" then
 			return dv, DBG._sortedTable(dv)
 		end
@@ -87,6 +92,14 @@ return function(DBG)
 			return dv, DBG._sortedTable(dv[DBG.FUNCTION_UPVALUE_NAMES])
 		end
 		return dv
+	end
+
+	-- Gets the next entry in the DV based on the current DV and nav[i]
+	function DBG._subGetDv(cdv, navI)
+		if navI.meta then
+			return debug.getmetatable(cdv)
+		end
+		return cdv[navI.key]
 	end
 
 	-- Loads a string with the debugger's environment
@@ -139,49 +152,38 @@ return function(DBG)
 		return to
 	end
 
-	-- Navigates to an environment path
-	function DBG._navigateTo(envPath)
-		DBG._envPath = envPath
+	-- Navigates one element relative to the current one
+	function DBG.navigate(action, arg)
+		DBG._navigate(DBG._envNav, action, arg)
 		DBG._yScroll = 1
 	end
 
-	-- Navigates to the metatable of the environment path
-	function DBG._navigateToMetaTable(dv, envPath)
-		local m = debug.getmetatable(dv)
+	-- Navigates to an environment path
+	function DBG.navigateTo(envPath)
+		local nav = {}
+		for s in envPath:gmatch("[^%.]+") do
+			DBG._navigate(nav, "key", s)
+		end
+		DBG._replaceEnvNav(nav)
+	end
 
-		if type(m) == "table" then
-			DBG._navigateTo("META(" .. envPath .. ")")
+	-- Navigates a specific navigation by a certain action
+	function DBG._navigate(nav, action, arg)
+		if action == "key" then
+			nav[#nav + 1] = { key = arg }
+		elseif action == "meta" then
+			nav[#nav + 1] = { meta = true }
+		elseif action == "parent" then
+			nav[#nav] = nil
+		else
+			error("Unknown navigation action.")
 		end
 	end
 
-	-- Navigates to the parent of the environment path
-	function DBG._navigateToParent(envPath)
-		repeat
-			local s = envPath
-
-			if s:find("^META%(.*%)$") then
-				envPath = s:sub(6, #s-1)
-			elseif s:find("%(%)$") then
-				envPath = s:sub(1, #s-2)
-			else
-				local e, _e = s:find("%[")
-				if e then s = s:sub(e+1, #s) end
-				local r = 0
-				while e do
-					r = r + e
-					e, _e = s:find("%[")
-					if e then s = s:sub(e+1, #s) end
-				end
-
-				if r > 0 then
-					envPath = envPath:sub(1, r-1)
-				else
-					envPath = DBG._envRootName
-				end
-			end
-		until envPath == DBG._envRootName or select(2, DBG._getDvIndex(envPath))
-
-		DBG._navigateTo(envPath)
+	-- Replaces the environment navigation
+	function DBG._replaceEnvNav(nav)
+		DBG._envNav = nav
+		DBG._yScroll = 1
 	end
 
 	-- Copies text to the console

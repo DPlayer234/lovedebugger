@@ -168,6 +168,23 @@ debugger.setEnv(env, [envName])
 -- Replaces the root environment used by the debugger and the Lua prompt.
 -- envName is the display name of the environment.
 
+debugger.navigate(action, [arg])
+-- Navigates the environment display once relative to the current state.
+-- action:
+--     'key': Navigate to the key as specified by arg.
+--     'meta': Navigate to the meta table.
+--     'parent': Navigate to the parent object.
+
+debugger.navigateTo(envPath)
+-- Navigates to a specified path.
+-- This is limited to paths defined with period indexing, not brackets or function calls.
+
+debugger.getEnvPath()
+-- Returns a string, representing the current environment path.
+
+debugger.getNiceEnvPath()
+-- Returns a string, containing a nice representation of the current environment path.
+
 debugger.loadString(code)
 -- Loads code with the environment set to debugger.getEnv().
 

@@ -44,7 +44,7 @@ return function(DBG)
 
 	-- Gets the strings to be displayed in the environment display
 	function DBG._getEnvStrings(w, h)
-		local dv, index = DBG._getDvIndex(DBG._envPath)
+		local dv, index = DBG._getDvIndex(DBG._envNav)
 		local envPathType = DBG.typeReal(dv):gsub(" ", " ")
 		if DBG.isFunctionIndexAllowed() and envPathType == "function" then
 			dv = dv[DBG.FUNCTION_UPVALUES]
@@ -107,21 +107,9 @@ return function(DBG)
 			local stringType, stringName, stringData, envPathType = DBG._getEnvStrings(w, h)
 
 			-- Variable Path
-			local path = (DBG._envRootName .. (DBG._envPath == DBG._envRootName and "" or " > " .. DBG._envPath)):gsub("%[\"", " > "):gsub("\"%]", ""):gsub(" ", " ")
+			local path = DBG.getNiceEnvPath()
 
-			if DBG._font:getWidth("\t" .. path) > w - tt then
-				while DBG._font:getWidth("\t…" .. path) > w-tt do
-					local byteoffset = utf8.offset(path, 2)
-					if byteoffset then
-						path = path:sub(byteoffset, #path)
-					else
-						break
-					end
-				end
-				path = "…" .. path
-			end
-
-			local header = string.format("\t%s\n\tType: %s %03dy\t", path, envPathType, DBG._yScroll)
+			local header = string.format("Type: %s %03dy\t", envPathType, DBG._yScroll)
 			if not DBG.useTitleBar then
 				header = header .. " ~" .. math.floor(DBG._ram + 0.5) .. " KB " .. love_timer.getFPS() .. " FPS"
 			end
@@ -138,7 +126,8 @@ return function(DBG)
 			love_graphics.rectangle("fill", tt, 0, wt, hprinted + DBG._fontHeight * 2)
 
 			love_graphics.setColor(DBG.color.fgActive2)
-			love_graphics.printf(header, tt, 0, wt, "justify")
+			love_graphics.print(path, math.min(tt + 10, tt + wt - 10 - DBG._font:getWidth(path)), 0)
+			love_graphics.printf(header, tt + 10, DBG._fontHeight, wt - 20, "justify")
 
 			love_graphics.setColor(DBG.color.fgActive)
 

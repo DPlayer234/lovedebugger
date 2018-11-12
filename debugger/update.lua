@@ -19,6 +19,11 @@ return function(DBG)
 	DBG._updateEvents = {}
 	DBG._updateTime = 0
 
+	-- Returns the value in a table
+	local function exget(table, key)
+		return table[key]
+	end
+
 	-- Allows copying from or pasting to the console
 	function DBG._handleClipboard()
 		if ((DBG.isDown("lctrl") or DBG.isDown("rctrl")) and DBG._keyboard.isDown("v"))
@@ -94,54 +99,51 @@ return function(DBG)
 
 	-- Handles the environment
 	function DBG._handleEnvUpdate()
-		local dv, index = DBG._getDvIndex(DBG._envPath)
+		local dv, index = DBG._getDvIndex(DBG._envNav)
 
 		if (DBG.isDown("m1") or DBG.isDown("m2")) and love_mouse.getX() >= love_graphics.getWidth() * DBG.printWidth then
 			local newId = math.floor(love_mouse.getY() / DBG._fontHeight - 2)
 
 			if newId >= 0 then
 				-- Clicked on a variable
-				if index and index[newId+DBG._yScroll] then
-					local newText = index[newId+DBG._yScroll]
+				if index and index[newId + DBG._yScroll] then
+					local newKey = index[newId + DBG._yScroll]
 
-					-- Getting variable name:
-					local newEnvPath = ""
-					local newType = type(newText)
-					if newType ~= "string" and newType ~= "number" then newText = DBG._tostring(newText) end
-					if DBG._envPath == DBG._envRootName then
-						newEnvPath = newText
-					else
-						newEnvPath = DBG._envPath .. "[" .. DBG._toSingleLine(DBG._toDisplayString(newText)) .. "]"
-					end
+					-- Getting the value we're trying to navigate to
+					local ok, newValue = pcall(exget, dv, newKey)
 
-					local dv = DBG._getDv(newEnvPath)
-					if type(dv) == "table" and DBG.isDown("m1") then
+					if not ok then
+						-- Something went wrong, ignore.
+					elseif type(newValue) == "table" and DBG.isDown("m1") then
 						-- Navigating to another table
-						DBG._navigateTo(newEnvPath)
+						DBG.navigate("key", newKey)
 					elseif DBG._keyboard.isDown("lshift", "rshift") then
 						-- Holding Shift
-						if DBG.isDown("m2") then
-							-- RMB
-							DBG._navigateToMetaTable(dv, newEnvPath)
-						elseif DBG.isFunctionIndexAllowed() and type(dv) == "function" then
-							-- Navigating to a function's upvalues
-							DBG._navigateTo(newEnvPath)
+						if DBG.isDown("m2") and debug.getmetatable(newValue) ~= nil then
+							-- RMB -> Navigate to potential metatable
+							DBG.navigate("key", newKey)
+							DBG.navigate("meta")
+						elseif DBG.isFunctionIndexAllowed() and type(newValue) == "function" then
+							-- Otherwise -> Navigating to a function's upvalues
+							DBG.navigate("key", newKey)
 						end
 					else
 						-- Copying the variable name to the prompt
-						DBG._copyTextToConsole(DBG._nicerEnvPath(newEnvPath))
+						local pNav = DBG._getEnvNavCopy()
+						DBG._navigate(pNav, "key", newKey)
+						DBG._copyTextToConsole(DBG.getEnvPath(pNav))
 					end
 				else
 					-- Copying the variable name to the prompt
-					DBG._copyTextToConsole(DBG._nicerEnvPath(DBG._envPath))
+					DBG._copyTextToConsole(DBG.getEnvPath())
 				end
 			else
 				-- Clicked on the top
-				if DBG.isDown("m2") then
+				if not DBG.isDown("m2") then
+					DBG.navigate("parent")
+				elseif debug.getmetatable(dv) ~= nil then
 					-- Navigating to the currently indexed variable's metatable
-					DBG._navigateToMetaTable(dv, DBG._envPath)
-				else
-					DBG._navigateToParent(DBG._envPath)
+					DBG.navigate("meta")
 				end
 			end
 		end

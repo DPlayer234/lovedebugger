@@ -9,9 +9,9 @@ return function(DBG)
 	local love_filesystem = require "love.filesystem"
 
 	local HISTORY_NAME = "DBG_HISTORY" --#const
-	local SAVE_DIR = love.filesystem.getSaveDirectory() --#const
-	local CUR_IDENTITY = love.filesystem.getIdentity() --#const
-	local HISTORY_PATH = SAVE_DIR:gsub(CUR_IDENTITY .. "$", "") .. "/" .. HISTORY_NAME --#const
+	local SAVE_DIR = love.filesystem.getSaveDirectory()
+	local CUR_IDENTITY = love.filesystem.getIdentity()
+	local HISTORY_PATH = SAVE_DIR:sub(1, #SAVE_DIR - #CUR_IDENTITY) .. HISTORY_NAME
 
 	-- Splits a string into a char array
 	local function toCharArray(string)

@@ -161,16 +161,16 @@ return function(DBG)
 
 	-- Quick navigation
 	DBG.newCommand("to", "", function()
-		DBG._navigateTo(DBG._envRootName)
-		return ":Moved to "..DBG._envPath.."."
+		DBG.navigateTo(DBG._envRootName)
+		return ":Moved to " .. DBG.getNiceEnvPath() .. "."
 	end)
 
 	DBG.newCommand("to", "s", function(s)
-		DBG._navigateTo(s:gsub("%.([^%[%]\"'%(%)%{%}%.]*)", function(t) return string.format("[%q]", t) end))
-		return ":Moved to " .. DBG._envPath .. "."
+		DBG.navigateTo(s)
+		return ":Moved to " .. DBG.getNiceEnvPath() .. "."
 	end)
 
-	DBG.newCommand("loc", "", function() return ":Currently at " .. DBG._nicerEnvPath(DBG._envPath) end)
+	DBG.newCommand("loc", "", function() return ":Currently at " .. DBG.getNiceEnvPath() end)
 
 	-- Help about commands
 	DBG.newCommand("help", "", function()

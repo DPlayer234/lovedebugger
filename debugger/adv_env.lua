@@ -39,7 +39,7 @@ return function(DBG)
 		DBG._completeMonitorOptions(options, DBG._envRoot)
 		local file = love.filesystem.newFile(MONITOR_FILE_NAME, "a")
 
-		DBG.printColor(DBG.color.red, ("\tNow monitoring '%s' for changes.\nWill be logged to '%s'."):format(DBG._envRootPath, MONITOR_FILE_NAME))
+		DBG.printColor(DBG.color.red, ("\tNow monitoring '%s' for changes.\nWill be logged to '%s'."):format(DBG._envRootName, MONITOR_FILE_NAME))
 
 		DBG._setMonitorEnv(DBG._envRoot, file, options)
 	end
@@ -75,7 +75,7 @@ return function(DBG)
 		monitorEnv      = env
 
 		if env == DBG._envRoot then
-			DBG.setEnv(envProxy, DBG._envPath)
+			DBG.setEnv(envProxy, DBG._envRootName)
 		end
 
 		setmetatable(env, {
@@ -118,7 +118,7 @@ return function(DBG)
 			end
 
 			if monitorEnvProxy == DBG._envRoot then
-				DBG.setEnv(monitorEnv, DBG._envPath)
+				DBG.setEnv(monitorEnv, DBG._envRootName)
 			end
 
 			monitorEnvProxy, monitorEnv = nil
