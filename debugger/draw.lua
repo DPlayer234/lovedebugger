@@ -31,7 +31,7 @@ return function(DBG)
 		love_graphics.print(prompt, x, h - DBG._fontHeight)
 
 		if love_timer.getTime() % 0.5 >= 0.25 then
-			if DBG._textPosition > #prompt then
+			if DBG._textPosition > #DBG._textTable then
 				love_graphics.rectangle("fill", DBG._font:getWidth(prompt), h - DBG._fontHeight, DBG._font:getWidth(" "), DBG._fontHeight)
 			else
 				love_graphics.rectangle("fill",
