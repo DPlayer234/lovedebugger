@@ -112,7 +112,7 @@ return function(DBG)
 
 	-- Hide fields of a certain table via pattern in the environment display
 	function DBG.hideFields(table, pattern)
-		assert(type(pattern) == "string", ":Argument #2 to DBG.hideFields(table, pattern) must be a string!")
+		assert(type(pattern) == "string" or pattern == nil, ":Argument #2 to DBG.hideFields(table, pattern) must be a string or nil!")
 		DBG._hidden[table] = pattern
 	end
 

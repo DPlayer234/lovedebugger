@@ -88,7 +88,7 @@ setmetatable(DBG, {
 	end
 })
 
-DBG.hideFields(DBG, "^_.*$")
+DBG.hideFields(DBG, "^_")
 
 DBG.addSource()
 

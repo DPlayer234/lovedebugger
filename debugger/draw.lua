@@ -69,19 +69,19 @@ return function(DBG)
 			indexData = indexData + 1
 		end
 
-		local maxLines = math.ceil(h / DBG._fontHeight)
+		local maxLines = math.ceil(h / DBG._fontHeight) - 4
 
 		if index then
 			-- Indexable
 			for i=1, #index do
-				if i >= DBG._yScroll and i <= maxLines + DBG._yScroll - 4 then
+				if i >= DBG._yScroll and i <= maxLines + DBG._yScroll then
 					local k = index[i]
 					local v = dv[k]
 
 					addType(DBG._validateUtf8(DBG.typeReal(v)))
 					addName(DBG._validateUtf8(DBG._toSingleLine(k)))
 					addData(DBG._validateUtf8(DBG._toSingleLine(DBG._toDisplayString(v))))
-				elseif i > maxLines + DBG._yScroll - 4 then
+				elseif i > maxLines + DBG._yScroll then
 					break
 				end
 			end
@@ -144,13 +144,11 @@ return function(DBG)
 	end
 
 	-- Draws any printed text
-	function DBG._drawAnyLG(w, h, lgTable, bgColor, fgColor, lgTime)
+	function DBG._drawAnyLG(x, y, w, h, lgTable, bgColor, fgColor, lgTime)
 		if DBG.printWidth > 0 then
-			local tt = math.ceil(w * DBG.printWidth) - 1
+			local _, wrap = DBG._font:getWrap(lgTable, w)
 
-			local _, wrap = DBG._font:getWrap(lgTable, tt)
-
-			while #lgTable > 2 and #wrap > math.floor(h / DBG._fontHeight - 1) do
+			while #lgTable > 2 and #wrap > math.floor(h / DBG._fontHeight) + 1 do
 				table.remove(lgTable, 1)
 				table.remove(lgTable, 1)
 
@@ -158,18 +156,19 @@ return function(DBG)
 					table.remove(lgTime, 1)
 				end
 
-				_, wrap = DBG._font:getWrap(lgTable, tt)
+				_, wrap = DBG._font:getWrap(lgTable, w)
 			end
 
 			local hlg = #wrap * DBG._fontHeight
+			y = y + h - hlg
 
-			love_graphics.setScissor(0, 0, tt, hlg)
+			love_graphics.setScissor(x, y, w, hlg)
 
 			love_graphics.setColor(bgColor)
-			love_graphics.rectangle("fill", 0, 0, tt, hlg)
+			love_graphics.rectangle("fill", x, y, w, hlg)
 
 			love_graphics.setColor(fgColor)
-			love_graphics.printf(lgTable, 0, 0, tt, "left")
+			love_graphics.printf(lgTable, x, y, w, "left")
 
 			love_graphics.setScissor()
 		end
@@ -177,13 +176,19 @@ return function(DBG)
 
 	-- Draws the printed text
 	function DBG._drawLG(w, h)
-		DBG._drawAnyLG(w, h, DBG._lg, DBG.color.bgActive, DBG.color.fgActive)
+		DBG._drawAnyLG(
+			0, 0,
+			math.ceil(w * DBG.printWidth) - 1, h - DBG._fontHeight - 1,
+			DBG._lg, DBG.color.bgActive, DBG.color.fgActive)
 	end
 
 	-- Draws the temporarily printed text
 	function DBG._drawLGTemp(w, h)
 		if DBG.doTempPrint then
-			DBG._drawAnyLG(w, h * DBG.printHeight, DBG._lgTemp, DBG.color.bgNotActive, DBG.color.fgNotActive, DBG._lgTime)
+			DBG._drawAnyLG(
+				0, h * (1 - DBG.printHeight),
+				math.ceil(w * DBG.printWidth) - 1, h * DBG.printHeight,
+				DBG._lgTemp, DBG.color.bgNotActive, DBG.color.fgNotActive, DBG._lgTime)
 		end
 	end
 
@@ -215,7 +220,7 @@ return function(DBG)
 		love_graphics.setWireframe(false)
 
 		DBG._ram = collectgarbage("count")
-		DBG._fontHeight = math.abs(DBG._font:getHeight() * DBG._font:getLineHeight())
+		DBG._fontHeight = DBG._font:getHeight() * DBG._font:getLineHeight()
 		local w, h = love_graphics.getDimensions()
 
 		if DBG.isActive() then
