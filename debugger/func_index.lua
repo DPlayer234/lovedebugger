@@ -121,7 +121,7 @@ return function(DBG)
 
 			local amount, bytes = 1, 5
 			local hardnames = {
-				[DBG.realPrint] = "print"
+				[DBG.lua_print] = "print"
 			}
 
 			local indexed = {

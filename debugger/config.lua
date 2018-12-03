@@ -13,7 +13,7 @@ return function(DBG)
 	DBG.printHeight  = 2/3    -- Screen Area height of the prints while the console is closed.
 	DBG.maxStorage   = 100    -- How many console inputs are stored to be reused (by using 'Up' and 'Down' arrow keys). (Default: 100)
 	DBG.useTitleBar  = true   -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar. (Default: true)
-	DBG.replaceTabs  = "    " -- Replace tab character in prints with the specified string.
+	DBG.replaceTabs  = 8      -- Replace tab character in prints with the specified amount of spaces.
 
 	DBG.color = {             -- Various colors used
 		-- Active:

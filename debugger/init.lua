@@ -46,12 +46,12 @@ do
 	local xpcall = xpcall
 
 	function DBG.safeUpdate(dt)
-		return xpcall(DBG.update, DBG.realPrint, dt)
+		return xpcall(DBG.update, DBG.lua_print, dt)
 	end
 
 	local function popNPrint(errormsg)
 		love_graphics.pop()
-		DBG.realPrint(errormsg)
+		DBG.lua_print(errormsg)
 	end
 
 	function DBG.safeDraw()

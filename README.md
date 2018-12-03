@@ -133,7 +133,7 @@ debugger.printColor(colorTable, ...)
 debugger.print(colorTable, ...)
 -- Print exclusively to the debugger's console in the defined color
 
-debugger.realPrint(...)
+debugger.lua_print(...)
 -- Regular Lua print function
 
 debugger.clear()
@@ -312,8 +312,8 @@ debugger.useTitleBar = true
 -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar.
 -- If false, will always display it in the upper-right corner of the window instead.
 
-debugger.replaceTabs = "    "
--- Replace tab character in prints with the specified characters.
+debugger.replaceTabs = 8
+-- Replace tab character in prints with the specified amount of spaces.
 -- Set to false to disable.
 
 debugger.color = {...}
@@ -374,7 +374,7 @@ If you want the profiler's reports to use the function name returned by tostring
 ## Other Things
 
 * The environment location at the top may glitch out and not tell you an entirely correct path if unexpected key names are used.
-* This tool monkey-patches Lua's 'print' (but not 'io.write') function. The original function is stored as 'debugger.realPrint'.
+* This tool monkey-patches Lua's 'print' (but not 'io.write') function. The original function is stored as 'debugger.lua_print'.
 * It will attempt to require "(require-path).font", which it expects to return a Font to use, on load. If it finds such a file, and it does not return a Font, it may crash.
 
 ---

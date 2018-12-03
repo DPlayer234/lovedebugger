@@ -144,19 +144,19 @@ return function(DBG)
 	end
 
 	-- Draws any printed text
-	function DBG._drawAnyLG(x, y, w, h, lgTable, bgColor, fgColor, lgTime)
+	function DBG._drawAnyLG(x, y, w, h, logged, bgColor, fgColor, loggedTime)
 		if DBG.printWidth > 0 then
-			local _, wrap = DBG._font:getWrap(lgTable, w)
+			local _, wrap = DBG._font:getWrap(logged, w)
 
-			while #lgTable > 2 and #wrap > math.floor(h / DBG._fontHeight) + 1 do
-				table.remove(lgTable, 1)
-				table.remove(lgTable, 1)
+			while #logged > 2 and #wrap > math.floor(h / DBG._fontHeight) + 1 do
+				table.remove(logged, 1)
+				table.remove(logged, 1)
 
-				if lgTime then
-					table.remove(lgTime, 1)
+				if loggedTime then
+					table.remove(loggedTime, 1)
 				end
 
-				_, wrap = DBG._font:getWrap(lgTable, w)
+				_, wrap = DBG._font:getWrap(logged, w)
 			end
 
 			local hlg = #wrap * DBG._fontHeight
@@ -168,7 +168,7 @@ return function(DBG)
 			love_graphics.rectangle("fill", x, y, w, hlg)
 
 			love_graphics.setColor(fgColor)
-			love_graphics.printf(lgTable, x, y, w, "left")
+			love_graphics.printf(logged, x, y, w, "left")
 
 			love_graphics.setScissor()
 		end
@@ -179,7 +179,7 @@ return function(DBG)
 		DBG._drawAnyLG(
 			0, 0,
 			math.ceil(w * DBG.printWidth) - 1, h - DBG._fontHeight - 1,
-			DBG._lg, DBG.color.bgActive, DBG.color.fgActive)
+			DBG._logged, DBG.color.bgActive, DBG.color.fgActive)
 	end
 
 	-- Draws the temporarily printed text
@@ -188,7 +188,7 @@ return function(DBG)
 			DBG._drawAnyLG(
 				0, h * (1 - DBG.printHeight),
 				math.ceil(w * DBG.printWidth) - 1, h * DBG.printHeight,
-				DBG._lgTemp, DBG.color.bgNotActive, DBG.color.fgNotActive, DBG._lgTime)
+				DBG._loggedTemp, DBG.color.bgNotActive, DBG.color.fgNotActive, DBG._loggedTempTime)
 		end
 	end
 

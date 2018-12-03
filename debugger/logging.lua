@@ -7,22 +7,27 @@ as published by Sam Hocevar. See the COPYING file for more details.
 return function(DBG)
 	local love_graphics = require "love.graphics"
 	local love_timer = require "love.timer"
+	local io = require "io"
 
 	local next, rawequal = next, rawequal
-	local table, math = table, math
+	local table, math, string = table, math, string
 
-	local lg, lgTemp, lgTime = {}, {}, {}
+	local lua_print = print
+	local io_write = io.write
+
+	local logged = {}
+	local loggedTemp, loggedTempTime = {}, {}
+
+	local MAXIMUM_LOG_ENTRIES = 200 --#const
+	local MAXIMUM_LOG_ENTRIES_x2 = MAXIMUM_LOG_ENTRIES * 2 --#const
 
 	-- Print something to the local console
 	local lastPrint, printedTimes
 	local function proxyPrint(c, ...)
 		local args = {...}
 		local top = 0
-		for i,v in next, args do
+		for i, v in next, args do
 			args[i] = DBG._validateUtf8(DBG._tostring(v))
-			if DBG.replaceTabs then
-				args[i] = args[i]:gsub("\t", DBG.replaceTabs)
-			end
 			if i > top then top = i end
 		end
 		for i=1, top do
@@ -32,20 +37,41 @@ return function(DBG)
 		end
 
 		if #args < 1 then args[1] = "nil" end
-		args[#args+1] = "\n"
+		args[#args + 1] = "\n"
 
-		local t = table.concat(args, DBG.replaceTabs or "\t")
+		local t = table.concat(args, "\t")
+		local tabPos = 1
+		while DBG.replaceTabs do
+			tabPos = t:find("\t", tabPos)
+			if not tabPos then break end
+			local new = DBG.replaceTabs - (tabPos - 1) % DBG.replaceTabs
+			if new == 0 then new = DBG.replaceTabs end
+			t = t:sub(1, tabPos - 1) .. string.rep(" ", new) .. t:sub(tabPos + 1, #t)
+			tabPos = tabPos + new
+		end
 
 		if t ~= lastPrint then
 			local time = love_timer.getTime()
 			for s in t:gmatch(".-\n") do
-				table.insert(lg, c)
-				table.insert(lg, s)
+				logged[#logged + 1] = c
+				logged[#logged + 1] = s
 
-				table.insert(lgTemp, c)
-				table.insert(lgTemp, s)
+				loggedTemp[#loggedTemp + 1] = c
+				loggedTemp[#loggedTemp + 1] = s
 
-				table.insert(lgTime, time)
+				loggedTempTime[#loggedTempTime + 1] = time
+			end
+
+			while #logged > MAXIMUM_LOG_ENTRIES_x2 do
+				table.remove(logged, 1)
+				table.remove(logged, 1)
+			end
+
+			while #loggedTemp > MAXIMUM_LOG_ENTRIES_x2 do
+				table.remove(loggedTemp, 1)
+				table.remove(loggedTemp, 1)
+
+				table.remove(loggedTempTime, 1)
 			end
 
 			lastPrint = t
@@ -53,37 +79,40 @@ return function(DBG)
 		else
 			printedTimes = printedTimes + 1
 			if printedTimes == 2 then
-				lg[#lg] = "(2x) "..lg[#lg]
+				logged[#logged] = "(2x) "..logged[#logged]
 			else
-				lg[#lg] = lg[#lg]:gsub("^%(%d+x%)", "("..DBG._tostring(printedTimes).."x)")
+				logged[#logged] = logged[#logged]:gsub("^%(%d+x%)", "("..DBG._tostring(printedTimes).."x)")
 			end
-			if #lgTemp > 1 then
-				lgTemp[#lgTemp] = lg[#lg]
-				lgTime[#lgTime] = love_timer.getTime()
+			if #loggedTemp > 1 then
+				loggedTemp[#loggedTemp] = logged[#logged]
+				loggedTempTime[#loggedTempTime] = love_timer.getTime()
 			else
-				lgTemp[1] = lg[#lg-1]
-				lgTemp[2] = lg[#lg]
-				lgTime[1] = love_timer.getTime()
+				loggedTemp[1] = logged[#logged - 1]
+				loggedTemp[2] = logged[#logged]
+				loggedTempTime[1] = love_timer.getTime()
 			end
 		end
+
+		return t
 	end
 
-	local realPrint = print
-	DBG.print = proxyPrint
-	DBG.realPrint = realPrint
+	local function proxyPrintNR(c, ...)
+		proxyPrint(c, ...)
+	end
+
+	DBG.print = proxyPrintNR
+	DBG.lua_print = lua_print
 
 	-- Prints stuff everywhere
 	function DBG.allPrint(...)
-		realPrint(...)
-		return proxyPrint(DBG.color.white, ...)
+		io_write(proxyPrint(DBG.color.white, ...))
 	end
 
 	print = DBG.allPrint
 
 	-- Prints in color everywhere
 	function DBG.printColor(c, text)
-		realPrint(text)
-		return proxyPrint(c, text)
+		io_write(proxyPrint(c, text))
 	end
 
 	-- Prints a log message
@@ -98,29 +127,30 @@ return function(DBG)
 
 	-- Clearing print calls
 	function DBG.clear()
-		for k,v in next, lg do lg[k] = nil end
+		for k,v in next, logged do logged[k] = nil end
 		DBG.tempClear()
 	end
 
 	-- Clears the temporary display only
 	function DBG.tempClear()
-		for k,v in next, lgTemp do lgTemp[k] = nil end
-		for k,v in next, lgTime do lgTime[k] = nil end
+		for k,v in next, loggedTemp do loggedTemp[k] = nil end
+		for k,v in next, loggedTempTime do loggedTempTime[k] = nil end
 	end
 
 	-- Fades the text in the temporary log out
 	function DBG._tempFade()
 		local ctime = love_timer.getTime()
-		while #lgTime > 0 and lgTime[1] + DBG.textFade < ctime do
-			table.remove(lgTemp, 1)
-			table.remove(lgTemp, 1)
-			table.remove(lgTime, 1)
+		while #loggedTempTime > 0 and loggedTempTime[1] + DBG.textFade < ctime do
+			table.remove(loggedTemp, 1)
+			table.remove(loggedTemp, 1)
+
+			table.remove(loggedTempTime, 1)
 		end
 	end
 
-	DBG._lg = lg
-	DBG._lgTemp = lgTemp
-	DBG._lgTime = lgTime
+	DBG._logged = logged
+	DBG._loggedTemp = loggedTemp
+	DBG._loggedTempTime = loggedTempTime
 
 	DBG.addSource()
 end
