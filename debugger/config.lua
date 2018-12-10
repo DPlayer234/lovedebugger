@@ -15,21 +15,22 @@ return function(DBG)
 	DBG.useTitleBar  = true   -- Whether or not to print FPS, Lua Ram Usage and update time to the window title bar. (Default: true)
 	DBG.replaceTabs  = 8      -- Replace tab character in prints with the specified amount of spaces.
 
-	DBG.color = {             -- Various colors used
+	DBG.colors = {            -- Various colors used
 		-- Active:
-		bgActive = {0.00,0.00,0.00,0.50},
-		fgActive = {1.00,1.00,1.00,1.00},
-		fgActive2= {0.80,0.80,1.00,1.00},
+		bgActive  = {0.00, 0.00, 0.00, 0.70},
+		fgActive  = {1.00, 1.00, 1.00, 1.00},
+		fgActive2 = {0.80, 0.80, 1.00, 1.00},
+
 		-- Not Active:
-		bgNotActive = {0.00,0.00,0.00,0.35},
-		fgNotActive = {1.00,1.00,1.00,0.70},
-		-- Other:
-		white = {1.00,1.00,1.00},
-		black = {0.00,0.00,0.00},
-		red   = {1.00,0.35,0.35},
-		blue  = {0.35,0.35,1.00},
-		green = {0.35,1.00,0.35},
-		yellow= {1.00,0.80,0.15},
+		bgNotActive = {0.00, 0.00, 0.00, 0.50},
+		fgNotActive = {1.00, 1.00, 1.00, 0.80},
+
+		-- Print colors:
+		printNormal  = {1.00, 1.00, 1.00},
+		printLog     = {0.75, 0.60, 1.00},
+		printInfo    = {0.35, 0.65, 1.00},
+		printError   = {1.00, 0.00, 0.00},
+		printWarning = {1.00, 0.65, 0.00},
 	}
 
 	DBG.addSource()

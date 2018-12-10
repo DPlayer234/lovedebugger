@@ -19,10 +19,10 @@ return function(DBG)
 
 	-- Printing the Lua prompt
 	function DBG._drawPrompt(w, h)
-		love_graphics.setColor(DBG.color.bgActive)
+		love_graphics.setColor(DBG.colors.bgActive)
 		love_graphics.rectangle("fill", 0, math.ceil(h - DBG._fontHeight), w, DBG._fontHeight)
 
-		love_graphics.setColor(DBG.color.fgActive)
+		love_graphics.setColor(DBG.colors.fgActive)
 
 		local prompt = DBG._getPromptText()
 		local width = DBG._font:getWidth(prompt)
@@ -122,14 +122,14 @@ return function(DBG)
 
 			love_graphics.setScissor(tt, 0, wt, wh)
 
-			love_graphics.setColor(DBG.color.bgActive)
+			love_graphics.setColor(DBG.colors.bgActive)
 			love_graphics.rectangle("fill", tt, 0, wt, hprinted + DBG._fontHeight * 2)
 
-			love_graphics.setColor(DBG.color.fgActive2)
+			love_graphics.setColor(DBG.colors.fgActive2)
 			love_graphics.print(path, math.min(tt + 10, tt + wt - 10 - DBG._font:getWidth(path)), 0)
 			love_graphics.printf(header, tt + 10, DBG._fontHeight, wt - 20, "justify")
 
-			love_graphics.setColor(DBG.color.fgActive)
+			love_graphics.setColor(DBG.colors.fgActive)
 
 			love_graphics.setScissor(tt, 0, tw, wh)
 			love_graphics.print(stringType, tt, DBG._fontHeight * 2)
@@ -138,7 +138,7 @@ return function(DBG)
 			love_graphics.print(stringData, tt + tw + nw, DBG._fontHeight * 2)
 
 			love_graphics.setScissor(tt + tw, 0, nw, wh)
-			love_graphics.setColor(DBG.color.fgActive2)
+			love_graphics.setColor(DBG.colors.fgActive2)
 			love_graphics.print(stringName, tt + tw, DBG._fontHeight*2)
 		end
 	end
@@ -179,7 +179,7 @@ return function(DBG)
 		DBG._drawAnyLG(
 			0, 0,
 			math.ceil(w * DBG.printWidth) - 1, h - DBG._fontHeight - 1,
-			DBG._logged, DBG.color.bgActive, DBG.color.fgActive)
+			DBG._logged, DBG.colors.bgActive, DBG.colors.fgActive)
 	end
 
 	-- Draws the temporarily printed text
@@ -188,7 +188,7 @@ return function(DBG)
 			DBG._drawAnyLG(
 				0, h * (1 - DBG.printHeight),
 				math.ceil(w * DBG.printWidth) - 1, h * DBG.printHeight,
-				DBG._loggedTemp, DBG.color.bgNotActive, DBG.color.fgNotActive, DBG._loggedTempTime)
+				DBG._loggedTemp, DBG.colors.bgNotActive, DBG.colors.fgNotActive, DBG._loggedTempTime)
 		end
 	end
 
@@ -199,10 +199,10 @@ return function(DBG)
 			local infoText = infoBox(love_timer.getFPS(), DBG._ram, updateDif)
 			local tw, wrap = DBG._font:getWrap(infoText, w)
 
-			love_graphics.setColor(DBG.color.bgNotActive)
+			love_graphics.setColor(DBG.colors.bgNotActive)
 			love_graphics.rectangle("fill", w-tw, 0, tw, #wrap * DBG._fontHeight)
 
-			love_graphics.setColor(DBG.color.fgNotActive)
+			love_graphics.setColor(DBG.colors.fgNotActive)
 			love_graphics.printf(infoText, w - tw, 0, tw, "right")
 		end
 	end

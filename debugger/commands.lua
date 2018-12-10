@@ -13,10 +13,12 @@ return function(DBG)
 	local commands = {}
 
 	-- Creates a new command
-	function DBG.newCommand(name, args, func)
-		assert(type(name) == "string", "Argument #1 to DBG.newCommand(name, args, func) must be a string!")
-		assert(type(args) == "string", "Argument #2 to DBG.newCommand(name, args, func) must be a string!")
-		assert(type(func) == "function" or debug.getmetatable(func) and rawget(debug.getmetatable(func), "__call"), "Argument #3 to DBG.newCommand(name, args, func) must be callable!")
+	function DBG.newCommand(name, args, help, func)
+		assert(type(name) == "string", "Argument #1 to DBG.newCommand(...) must be a string!")
+		assert(type(args) == "string", "Argument #2 to DBG.newCommand(...) must be a string!")
+		if func == nil then help, func = "---", help end
+		assert(type(help) == "string", "Argument #3 to DBG.newCommand(...) must be a string!")
+		assert(type(func) == "function" or debug.getmetatable(func) and rawget(debug.getmetatable(func), "__call"), "Argument #4 to DBG.newCommand(...) must be callable!")
 
 		if commands[name] == nil then
 			commands[name] = { name = name, alias = {} }
@@ -25,6 +27,7 @@ return function(DBG)
 		end
 		local c = {
 			args = args,
+			help = help,
 			func = func
 		}
 		commands[name][#commands[name]+1] = c
@@ -68,7 +71,7 @@ return function(DBG)
 				end
 			end
 		else
-			DBG.printError(":ERROR:" .. DBG._tostring(r[2]))
+			DBG.printError(":" .. DBG._tostring(r[2]))
 		end
 	end
 
@@ -136,60 +139,78 @@ return function(DBG)
 				if s then
 					DBG.printLog(out or ":Executed.")
 				else
-					DBG.printError(":ERROR:" .. DBG._tostring(out))
+					DBG.printError(":" .. DBG._tostring(out))
 				end
 			else
-				DBG.printError(":ERROR:Incorrect arguments...")
+				DBG.printError(":Incorrect arguments.")
 			end
 		else
-			DBG.printError(":ERROR:Unknown command. Add commands with DBG.newCommand(name, args, function)")
+			DBG.printError(":Unknown command. Add commands with DBG.newCommand(name, args, function)")
 		end
 	end
 
 	-- Adding some default commands!
-	DBG.newCommand("index", "" , DBG.allowFunctionIndex)
-	DBG.newCommand("index", "b", DBG.allowFunctionIndex)
+	DBG.newCommand("index", "" , "Enables function indexing.", DBG.allowFunctionIndex)
+	DBG.newCommand("index", "b", "Enables function indexing, indicating whether or not pretty names are wanted.", DBG.allowFunctionIndex)
 
-	DBG.newCommand("global", "" , DBG.monitorGlobal)
-	DBG.newCommand("global", "s", DBG.monitorGlobal)
+	DBG.newCommand("global", "" , "Enables env monitoring.", DBG.monitorGlobal)
 
-	DBG.newCommand("local", "sn", DBG.viewLocals)
-	DBG.newCommand("local", "", DBG.viewLocals)
+	DBG.newCommand("local", "sn", "Enables local viewing in a specific file and line number.", DBG.viewLocals)
+	DBG.newCommand("local", "", "Disables local viewing.", DBG.viewLocals)
 
 	-- Screen Clearing
-	DBG.newCommand("clear", "", DBG.clear)
+	DBG.newCommand("clear", "", "Clears the output.", DBG.clear)
 
 	-- Quick navigation
-	DBG.newCommand("to", "", function()
+	DBG.newCommand("to", "", "Navigates to the environment root.", function()
 		DBG.navigateTo(DBG._envRootName)
 		return ":Moved to " .. DBG.getNiceEnvPath() .. "."
 	end)
 
-	DBG.newCommand("to", "s", function(s)
+	DBG.newCommand("to", "s", "Navigates to a specific table.", function(s)
 		DBG.navigateTo(s)
 		return ":Moved to " .. DBG.getNiceEnvPath() .. "."
 	end)
 
-	DBG.newCommand("loc", "", function() return ":Currently at " .. DBG.getNiceEnvPath() end)
+	DBG.newCommand("loc", "", "Prints the current navigation path.", function() return ":Currently at " .. DBG.getNiceEnvPath() end)
+
+	local function tableIt(names, maxLength)
+		local tabled = {}
+		local spacing = maxLength + 2
+		for i=1, #names, 3 do
+			local n0 = names[i]
+			local n1 = names[i + 1]
+			local n2 = names[i + 2]
+
+			local res = "\t" .. n0
+			if n1 then res = res .. (" "):rep(spacing - #n0) .. n1 end
+			if n2 then res = res .. (" "):rep(spacing - #n1) .. n2 end
+			tabled[#tabled + 1] = res
+		end
+
+		return table.concat(tabled, "\n")
+	end
 
 	-- Help about commands
-	DBG.newCommand("help", "", function()
-		local all = {}
-		for k,v in next, commands do
+	DBG.newCommand("help", "", "Displays a list of available commands.", function()
+		local names = {}
+		local maxLength = 0
+		for k, v in next, commands do
 			if k == v.name then
-				all[#all+1] = "\t"..k
+				names[#names + 1] = k
+				maxLength = math.max(#k, maxLength)
 			end
 		end
-		table.sort(all)
-		table.insert(all, 1, "All available commands:")
-		return table.concat(all, "\n")
+		table.sort(names)
+
+		return ":All available commands\n" .. tableIt(names, maxLength)
 	end)
 
-	DBG.newCommand("help", "s", function(s)
+	DBG.newCommand("help", "s", "Displays help for a specific command.", function(s)
 		local cmd = commands[s]
 		if cmd then
 			local name = cmd.name
-			local all = {}
+			local all = { ":Help for '"..name.."'" }
 			local replace = {
 				s = "<string>",
 				n = "<number>",
@@ -199,20 +220,24 @@ return function(DBG)
 			for i=1, #cmd do
 				local v = cmd[i]
 				if v.args == "" then
-					all[#all+1] = "\t/"..name
+					all[#all + 1] = "/" .. name
 				else
 					local x = v.args:gsub("", " ")
-					all[#all+1] = "\t/" .. name .. " " .. x:sub(2, #x-1):gsub(".", replace)
+					all[#all + 1] = "/" .. name .. " " .. x:sub(2, #x-1):gsub(".", replace)
 				end
+				all[#all + 1] = "\t" .. v.help
 			end
 
-			table.sort(all)
-			table.insert(all, 1, "[[ Help for '"..name.."' ]]\nSyntax:")
 			if #cmd.alias > 0 then
-				table.insert(all, "Aliases:")
+				table.insert(all, ":Aliases")
+				local names = {}
+				local maxLength = 0
 				for i=1, #cmd.alias do
-					table.insert(all, "\t/"..cmd.alias[i].." ...")
+					names[i] = cmd.alias[i]
+					maxLength = math.max(#names[i], maxLength)
 				end
+				table.sort(names)
+				table.insert(all, tableIt(names, maxLength))
 			end
 
 			return table.concat(all, "\n")

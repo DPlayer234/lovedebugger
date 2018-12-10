@@ -1,6 +1,6 @@
 # LöveDebugger
 
-(Not so) simple debugging tool for [Löve](https://www.love2d.org/), currently for Löve version 11.0 (for older version, please check older releases).
+(Not so) simple debugging tool for [Löve](https://www.love2d.org/), currently for Löve version 11.0 or newer (for older version, please check older releases).
 
 Download/Clone the repository and include the 'debugger' folder in your Lua path or game directory (I suggest against leaving debug code in releases).
 
@@ -75,12 +75,12 @@ Additionally, it supports commands. Commands can be accessed by prefixing a comm
 You can also add custom commands like so:
 
 ```lua
-debugger.newCommand(name, arg_pattern, func)
+debugger.newCommand(name, arg_pattern, [help_text], func)
 -- The argument pattern is a string. Every character represents an argument.
 -- 's' means a string is expected, 'n' a number and 'b' a boolean.
 -- There can be multiple commands with the same name and different arguments.
 -- Commands added earlier are always prioritized.
--- If the passed function returns anything, this will printed to the screen in yellow.
+-- If the passed function returns anything, this will printed to the screen in debugger.colors.printLog.
 
 -- Example:
 debugger.newCommand("ret", "snb", function(string, number, boolean)
@@ -316,7 +316,7 @@ debugger.replaceTabs = 8
 -- Replace tab character in prints with the specified amount of spaces.
 -- Set to false to disable.
 
-debugger.color = {...}
+debugger.colors = {...}
 -- A list of several colors used by the debugger, most notably:
 -- fgActive, fgActive2, bgActive,
 -- fgNotActive, bgNotActive

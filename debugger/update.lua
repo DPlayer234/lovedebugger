@@ -191,7 +191,7 @@ return function(DBG)
 		for i=1, #DBG._updateEvents do
 			local s, r = pcall(DBG._updateEvents[i].func, dt)
 			if not s then
-				DBG.printError(":ERROR:" .. DBG._tostring(r))
+				DBG.printError(":" .. DBG._tostring(r))
 			end
 		end
 

@@ -39,7 +39,7 @@ return function(DBG)
 		DBG._completeMonitorOptions(options, DBG._envRoot)
 		local file = love.filesystem.newFile(MONITOR_FILE_NAME, "a")
 
-		DBG.printColor(DBG.color.red, ("\tNow monitoring '%s' for changes.\nWill be logged to '%s'."):format(DBG._envRootName, MONITOR_FILE_NAME))
+		DBG.printInfo((":Now monitoring '%s' for changes. Will be logged to '%s'."):format(DBG._envRootName, MONITOR_FILE_NAME))
 
 		DBG._setMonitorEnv(DBG._envRoot, file, options)
 	end
@@ -82,7 +82,7 @@ return function(DBG)
 			__index = function(t, k)
 				if options[k] < DBG.MONITOR_CONSTANT and DBG._notInDebugger() then
 					local message = (":Undefined global '%s' was attempted to be accessed!"):format(k)
-					DBG.printColor(DBG.color.blue, message)
+					DBG.printWarning(message)
 					file:write(traceback(message, 2) .. "\n\n")
 					file:flush()
 				end
@@ -92,7 +92,7 @@ return function(DBG)
 			__newindex = function(t, k, v)
 				if (options[k] < DBG.MONITOR_CONSTANT or (options[k] == DBG.MONITOR_CONSTANT and envProxy[k] ~= nil)) and DBG._notInDebugger() then
 					local message = (":Non-dynamic global '%s' was set to: %s"):format(k, v)
-					DBG.printColor(DBG.color.blue, message)
+					DBG.printWarning(message)
 					file:write(traceback(message, 2) .. "\n\n")
 					file:flush()
 				end
@@ -109,7 +109,7 @@ return function(DBG)
 			monitorFile = nil
 
 			if log or log == nil then
-				DBG.printColor(DBG.color.red, "\tNo longer monitoring the global environment for changes.")
+				DBG.printInfo(":No longer monitoring the global environment for changes.")
 			end
 
 			setmetatable(monitorEnv, debug.getmetatable(monitorEnvProxy))
@@ -133,7 +133,7 @@ return function(DBG)
 	function DBG.viewLocals(src, inLine, var, key)
 		if src == nil then
 			debug.sethook()
-			DBG.printColor(DBG.color.blue, "Disabled local viewer.")
+			DBG.printInfo(":Disabled local viewer.")
 		else
 			local getinfo = debug.getinfo
 			local getlocal = debug.getlocal
@@ -155,12 +155,12 @@ return function(DBG)
 			else
 				error("Argument #1 to DBG.viewLocals(src, inLine, var, key) must be a function or string!")
 			end
+
 			if type(inLine) ~= "number" then
-				DBG.printError("You need to pass the line to check in!")
-				return
+				error("You need to pass the line to check in!")
 			end
 
-			DBG.printColor(DBG.color.blue, "Enabled local viewer.\nAny future passes on that line will now write a table!")
+			DBG.printInfo(":Enabled local viewer. Any future passes on that line will now write a table!")
 
 			sethook(function(event, line)
 				if line == inLine and src == getinfo(2, "S").source then

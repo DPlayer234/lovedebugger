@@ -17,7 +17,7 @@ return function(DBG)
 
 	-- Up-Value-getter
 	function DBG.allowFunctionIndex(prettyNames)
-		DBG.printColor(DBG.color.red, "\tAllowing the indexing of functions!\nAccess to indexing is only allowed within the command line.")
+		DBG.printInfo(":Allowing the indexing of functions! Access to indexing is only allowed within the command line.")
 		indexFunctions = true
 
 		local filesystem = require("love.filesystem")
@@ -229,7 +229,7 @@ return function(DBG)
 				return names[self]
 			end
 
-			DBG.printColor(DBG.color.blue, "\tAdded " .. DBG._tostring(amount) .. " function names for predefined functions, totalling " .. DBG._tostring(bytes) .. " characters.")
+			DBG.printInfo(":Added " .. DBG._tostring(amount) .. " function names for predefined functions, totalling " .. DBG._tostring(bytes) .. " characters.")
 		else
 			prettyFunctions = false
 		end
@@ -239,7 +239,7 @@ return function(DBG)
 
 	-- Disallows function indexing
 	function DBG.disallowFunctionIndex()
-		DBG.printColor(DBG.color.red, "\tIndexing functions has been disabled.")
+		DBG.printInfo(":Indexing functions has been disabled.")
 
 		indexFunctions = false
 		prettyFunctions = false

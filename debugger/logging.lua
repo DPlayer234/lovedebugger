@@ -9,7 +9,7 @@ return function(DBG)
 	local love_timer = require "love.timer"
 	local io = require "io"
 
-	local next, rawequal = next, rawequal
+	local next, rawequal, select = next, rawequal, select
 	local table, math, string = table, math, string
 
 	local lua_print = print
@@ -24,35 +24,20 @@ return function(DBG)
 	-- Print something to the local console
 	local lastPrint, printedTimes
 	local function proxyPrint(c, ...)
+		local argc = select("#", ...)
 		local args = {...}
-		local top = 0
-		for i, v in next, args do
-			args[i] = DBG._validateUtf8(DBG._tostring(v))
-			if i > top then top = i end
-		end
-		for i=1, top do
-			if rawequal(args[i], nil) then
-				args[i] = "nil"
-			end
+
+		for i=1, argc do
+			args[i] = DBG._validateUtf8(DBG._tostring(args[i]))
 		end
 
-		if #args < 1 then args[1] = "nil" end
-		args[#args + 1] = "\n"
+		args[argc + 1] = "\n"
 
-		local t = table.concat(args, "\t")
-		local tabPos = 1
-		while DBG.replaceTabs do
-			tabPos = t:find("\t", tabPos)
-			if not tabPos then break end
-			local new = DBG.replaceTabs - (tabPos - 1) % DBG.replaceTabs
-			if new == 0 then new = DBG.replaceTabs end
-			t = t:sub(1, tabPos - 1) .. string.rep(" ", new) .. t:sub(tabPos + 1, #t)
-			tabPos = tabPos + new
-		end
+		local fullText = DBG._replaceTabs(table.concat(args, "\t"))
 
-		if t ~= lastPrint then
+		if fullText ~= lastPrint then
 			local time = love_timer.getTime()
-			for s in t:gmatch(".-\n") do
+			for s in fullText:gmatch(".-\n") do
 				logged[#logged + 1] = c
 				logged[#logged + 1] = s
 
@@ -74,7 +59,7 @@ return function(DBG)
 				table.remove(loggedTempTime, 1)
 			end
 
-			lastPrint = t
+			lastPrint = fullText
 			printedTimes = 1
 		else
 			printedTimes = printedTimes + 1
@@ -93,36 +78,68 @@ return function(DBG)
 			end
 		end
 
-		return t
+		return fullText
 	end
 
-	local function proxyPrintNR(c, ...)
+	-- Replaces tabs in a string according to DBG.replaceTabs
+	function DBG._replaceTabs(str)
+		if not DBG.replaceTabs then return str end
+
+		local nlPos = str:find("\n") or 0
+		local tabPos = str:find("\t")
+		if nlPos > tabPos then nlPos = 0 end
+		while tabPos do
+			local nnlPos
+			repeat
+				nlPos = nnlPos or nlPos
+				nnlPos = str:find("\n", nlPos + 1)
+			until not nnlPos or nnlPos > tabPos
+			local new = DBG.replaceTabs - (tabPos - nlPos - 1) % DBG.replaceTabs
+			if new == 0 then new = DBG.replaceTabs end
+			str = str:sub(1, tabPos - 1) .. string.rep(" ", new) .. str:sub(tabPos + 1, #str)
+			tabPos = str:find("\t", tabPos + new)
+		end
+
+		return str
+	end
+
+	DBG.lua_print = lua_print
+
+	-- Prints text to the debugger console only
+	function DBG.print(c, ...)
 		proxyPrint(c, ...)
 	end
 
-	DBG.print = proxyPrintNR
-	DBG.lua_print = lua_print
-
 	-- Prints stuff everywhere
 	function DBG.allPrint(...)
-		io_write(proxyPrint(DBG.color.white, ...))
+		io_write(proxyPrint(DBG.colors.printNormal, ...))
 	end
 
 	print = DBG.allPrint
 
 	-- Prints in color everywhere
 	function DBG.printColor(c, text)
-		io_write(proxyPrint(c, text))
+		return io_write(proxyPrint(c, text))
 	end
 
 	-- Prints a log message
 	function DBG.printLog(text)
-		DBG.printColor(DBG.color.yellow, text)
+		return DBG.printColor(DBG.colors.printLog, text)
+	end
+
+	-- Prints information
+	function DBG.printInfo(text)
+		return DBG.printColor(DBG.colors.printInfo, text)
 	end
 
 	-- Prints an error
 	function DBG.printError(text)
-		DBG.printColor(DBG.color.red, text)
+		return DBG.printColor(DBG.colors.printError, text)
+	end
+
+	-- Prints a warning
+	function DBG.printWarning(text)
+		return DBG.printColor(DBG.colors.printWarning, text)
 	end
 
 	-- Clearing print calls
