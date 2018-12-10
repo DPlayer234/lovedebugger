@@ -91,12 +91,11 @@ return function(DBG)
 			end
 		end
 
-		DBG.newCommand("pstart", "", DBG.startProfiler)
-		DBG.newCommand("pstop", "", DBG.stopProfiler)
-		DBG.newCommand("pinterval", "n", DBG.setProfilerInterval)
-		DBG.newCommand("preport", "sn", DBG.setProfilerReportArgs)
-		DBG.newCommand("preport", "s", DBG.setProfilerReportArgs)
-		DBG.newCommand("preport", "", DBG.setProfilerReportArgs)
+		DBG.newCommand("pstart", "", "Starts the profiler", DBG.startProfiler)
+		DBG.newCommand("pstop", "", "Stops the profiler", DBG.stopProfiler)
+		DBG.newCommand("pinterval", "n", "Sets the profiler interval", DBG.setProfilerInterval)
+		DBG.newCommand("preport", "sn", "Sets profiler report arguments.", DBG.setProfilerReportArgs)
+		DBG.newCommand("preport", "", "Sets profiler report arguments to their defaults.", DBG.setProfilerReportArgs)
 
 		profileLib.hookall("Lua")
 

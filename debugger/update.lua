@@ -59,17 +59,13 @@ return function(DBG)
 	-- For moving the cursor through the written text
 	function DBG._handleCursorMovement()
 		if DBG.isDown("right") and DBG._textPosition <= #DBG._textTable then
-			DBG._textPosition = DBG._textPosition + 1
-
-			while DBG._keyboard.isDown("lctrl", "rctrl") and DBG._textPosition <= #DBG._textTable and DBG._textTable[DBG._textPosition]:find("%w") do
+			repeat
 				DBG._textPosition = DBG._textPosition + 1
-			end
+			until not (DBG._keyboard.isDown("lctrl", "rctrl") and DBG._textPosition <= #DBG._textTable and DBG._textTable[DBG._textPosition]:find("%w"))
 		elseif DBG.isDown("left") and DBG._textPosition > 1 then
-			DBG._textPosition = DBG._textPosition - 1
-
-			while DBG._keyboard.isDown("lctrl", "rctrl") and DBG._textPosition > 1 and DBG._textTable[DBG._textPosition]:find("%w") do
+			repeat
 				DBG._textPosition = DBG._textPosition - 1
-			end
+			until not (DBG._keyboard.isDown("lctrl", "rctrl") and DBG._textPosition > 1 and DBG._textTable[DBG._textPosition - 1]:find("%w"))
 		end
 	end
 
