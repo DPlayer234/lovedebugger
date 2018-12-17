@@ -11,9 +11,9 @@ return function(DBG)
 	local indexFunctions = false
 	local prettyFunctions = false
 
-	DBG.FUNCTION_CODE = "DBG.FUNCTION_CODE"
-	DBG.FUNCTION_UPVALUES = "DBG.FUNCTION_UPVALUES"
-	DBG.FUNCTION_UPVALUE_NAMES = "DBG.FUNCTION_UPVALUE_NAMES"
+	DBG.FUNCTION_CODE = 0
+	DBG.FUNCTION_UPVALUES = 1
+	DBG.FUNCTION_UPVALUE_MAP = 2
 
 	-- Up-Value-getter
 	function DBG.allowFunctionIndex(prettyNames)
@@ -26,28 +26,100 @@ return function(DBG)
 			return info and info.type == "file"
 		end
 
-		local upval = setmetatable({}, {__mode = "kv"})
-		local ret = setmetatable({}, {__mode = "kv", __index = function()return{}end})
-		local retn = setmetatable({}, {__mode = "kv"})
+		local upvalueIds = setmetatable({}, { __mode = "k" })
+
+		local selfFillingMeta = {
+			__mode = "k",
+			__index = function(t, k)
+				local v = {}
+				t[k] = v
+				return v
+			end
+		}
+
+		local upvalues = setmetatable({}, selfFillingMeta)
+		local upvalueMaps = setmetatable({}, selfFillingMeta)
 
 		local isVarName = DBG.isVariableName
 
-		local getlist = function(f)
-			if upval[f] then
-				return upval[f]
+		-- Gets a list with all up-values of the function
+		local function getUpvalueIds(f)
+			if upvalueIds[f] then
+				return upvalueIds[f]
 			else
-				local fup = {}
+				local fUpIds = {}
 
 				local i = 1
 				local k, v = debug.getupvalue(f, i)
 				while k do
-					fup[isVarName(k) and k or i] = i
+					fUpIds[isVarName(k) and k or i] = i
 					i = i + 1
 					k, v = debug.getupvalue(f, i)
 				end
 
-				upval[f] = fup
-				return fup
+				upvalueIds[f] = fUpIds
+				return fUpIds
+			end
+		end
+
+		-- Gets a table with all up-values of the function (name: value)
+		local function getUpvalues(f)
+			local fUpIds = getUpvalueIds(f)
+			local t = upvalues[f]
+			for name, id in next, fUpIds do
+				name, t[name] = debug.getupvalue(f, id)
+			end
+			return t
+		end
+
+		-- Gets a list with all up-values of the function as key-value pairs
+		local function getUpvalueMap(f)
+			local fUpIds = getUpvalueIds(f)
+			local t = upvalueMaps[f]
+			for name, id in next, fUpIds do
+				local name, value = debug.getupvalue(f, id)
+				t[id] = { key = name, value = value }
+			end
+			table.sort(t, DBG.envSortFunc)
+			return t
+		end
+
+		-- Gets the code of a function
+		local function getCode(f)
+			if debug.getinfo then
+				local info = debug.getinfo(f, "S")
+				local source = (info.source or ""):gsub("^@", "")
+				if isFile(source) then
+					local i = 0
+					local codelines = {}
+					for line in filesystem.lines(source) do
+						i = i + 1
+						-- linedefined, lastlinedefined, params
+						if i >= info.linedefined then
+							codelines[#codelines+1] = line
+							if i >= info.lastlinedefined then
+								break
+							end
+						end
+					end
+
+					return table.concat(codelines, "\n")
+				else
+					error("unable to find code file")
+				end
+			else
+				error("Cannot get code... No JIT utils?")
+			end
+		end
+
+		-- Gets an upvalue by name
+		local function getUpvalue(f, name)
+			local fUpIds = getUpvalueIds(f)
+			if fUpIds[name] then
+				local k, v = debug.getupvalue(f, fUpIds[name])
+				return v
+			else
+				error("attempt to get invalid upvalue", 2)
 			end
 		end
 
@@ -55,58 +127,22 @@ return function(DBG)
 			__index = function(f, k)
 				if DBG._notInDebugger() then error("attempt to index a function value", 2) end
 
-				local fup = getlist(f)
-
-				if k == DBG.FUNCTION_UPVALUES then
-					local t = ret[f]
-					local _
-					for k,v in next, fup do _, t[k] = debug.getupvalue(f, v) end
-					return t
-				elseif k == DBG.FUNCTION_UPVALUE_NAMES then
-					if retn[f] then
-						return retn[f]
-					else
-						local t = {}
-						for k,v in next, fup do t[k] = true end
-						retn[f] = t
-						return t
-					end
+				if type(k) == "string" then
+					return getUpvalue(f, k)
+				elseif k == DBG.FUNCTION_UPVALUES then
+					return getUpvalues(f)
+				elseif k == DBG.FUNCTION_UPVALUE_MAP then
+					return getUpvalueMap(f)
 				elseif k == DBG.FUNCTION_CODE then
-					if debug.getinfo then
-						local info = debug.getinfo(f, "S")
-						local source = (info.source or ""):gsub("^@", "")
-						if isFile(source) then
-							local i = 0
-							local codelines = {}
-							for line in filesystem.lines(source) do
-								i = i + 1
-								-- linedefined, lastlinedefined, params
-								if i >= info.linedefined then
-									codelines[#codelines+1] = line
-									if i >= info.lastlinedefined then
-										break
-									end
-								end
-							end
-
-							return table.concat(codelines, "\n")
-						else
-							error("unable to find code file")
-						end
-					else
-						error("Cannot get code... No JIT utils?")
-					end
-				elseif fup[k] then
-					local k, v = debug.getupvalue(f, fup[k])
-					return v
+					return getCode(f)
 				else
-					error("attempt to get invalid upvalue", 2)
+					error("invalid function index operation", 2)
 				end
 			end,
 			__newindex = function(f, k, v)
-				local fup = getlist(f)
-				if fup[k] then
-					debug.setupvalue(f, fup[k], v)
+				local fUpIds = getUpvalueIds(f)
+				if fUpIds[k] then
+					debug.setupvalue(f, fUpIds[k], v)
 				else
 					error("attempt to set invalid upvalue", 2)
 				end

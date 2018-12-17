@@ -285,6 +285,12 @@ debugger.hideFields(var, pattern)
 
 local down = debugger.isDown(inputId)
 -- Returns whether a given input is held.
+
+debugger.envSortFunc = function(a, b) ... end
+-- Treat this as an overridable callback.
+-- It determines the sorting order for variables in the environment display.
+-- The arguments are key-value pairs in the form of { key="key", value="value" }
+-- with the corresponding environment item.
 ```
 
 There's also a few constants that you may modify as well:

@@ -44,52 +44,34 @@ return function(DBG)
 
 	-- Gets the strings to be displayed in the environment display
 	function DBG._getEnvStrings(w, h)
-		local dv, index = DBG._getDvIndex(DBG._envNav)
-		local envPathType = DBG.typeReal(dv):gsub(" ", " ")
-		if DBG.isFunctionIndexAllowed() and envPathType == "function" then
-			dv = dv[DBG.FUNCTION_UPVALUES]
-		end
+		local navSort, navValue = DBG._getNavValueSort(DBG._envNav)
+		local envPathType = DBG.typeReal(navValue):gsub(" ", " ")
 
 		local tableType, indexType = {}, 1
 		local tableName, indexName = {}, 1
 		local tableData, indexData = {}, 1
 
-		local function addType(arg)
-			tableType[indexType] = arg
-			indexType = indexType + 1
-		end
-
-		local function addName(arg)
-			tableName[indexName] = arg
-			indexName = indexName + 1
-		end
-
-		local function addData(arg)
-			tableData[indexData] = arg:sub(1, 150)
-			indexData = indexData + 1
-		end
-
 		local maxLines = math.ceil(h / DBG._fontHeight) - 4
 
-		if index then
+		if navSort then
 			-- Indexable
-			for i=1, #index do
-				if i >= DBG._yScroll and i <= maxLines + DBG._yScroll then
-					local k = index[i]
-					local v = dv[k]
+			for i=DBG._yScroll, math.min(#navSort, maxLines + DBG._yScroll) do
+				local k = navSort[i].key
+				local v = navSort[i].value
 
-					addType(DBG._validateUtf8(DBG.typeReal(v)))
-					addName(DBG._validateUtf8(DBG._toSingleLine(k)))
-					addData(DBG._validateUtf8(DBG._toSingleLine(DBG._toDisplayString(v))))
-				elseif i > maxLines + DBG._yScroll then
-					break
-				end
+				tableType[indexType] = DBG._validateUtf8(DBG.typeReal(v))
+				tableName[indexName] = DBG._validateUtf8(DBG._toSingleLine(k))
+				tableData[indexData] = DBG._validateUtf8(DBG._toSingleLine(DBG._toDisplayString(v)))
+
+				indexType = indexType + 1
+				indexName = indexName + 1
+				indexData = indexData + 1
 			end
 
-			addType("\t>>>\n")
-			addName("")
+			tableType[indexType] = "\t>>>\n"
+			tableName[indexName] = ""
 		else
-			addType(DBG._tostring(dv):gsub(" ", " ").."\n\t>>>\n")
+			tableType[1] = DBG._tostring(navValue):gsub(" ", " ").."\n\t>>>\n"
 		end
 
 		local stringType = table.concat(tableType, " \n")

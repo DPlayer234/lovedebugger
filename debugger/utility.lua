@@ -37,6 +37,15 @@ return function(DBG)
 		return n
 	end
 
+	-- Makes a list with elements in the form of { key: k, value: v } out of the given table.
+	function DBG._untable(t)
+		local n = {}
+		for k, v in pairs(t) do
+			n[#n + 1] = { key = k, value = v }
+		end
+		return n
+	end
+
 	-- P-called tostring
 	function DBG._tostring(t)
 		local s, r = pcall(tostring, t)

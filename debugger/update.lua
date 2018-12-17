@@ -97,22 +97,19 @@ return function(DBG)
 
 	-- Handles the environment
 	function DBG._handleEnvUpdate()
-		local dv, index = DBG._getDvIndex(DBG._envNav)
+		local navSort, navValue = DBG._getNavValueSort(DBG._envNav)
 
 		if (DBG.isDown("m1") or DBG.isDown("m2")) and love_mouse.getX() >= love_graphics.getWidth() * DBG.printWidth then
 			local newId = math.floor(love_mouse.getY() / DBG._fontHeight - 2)
 
 			if newId >= 0 then
-				-- Clicked on a variable
-				if index and index[newId + DBG._yScroll] then
-					local newKey = index[newId + DBG._yScroll]
-
+				-- Clicked on a variable?
+				local click = navSort and navSort[newId + DBG._yScroll]
+				if click then
 					-- Getting the value we're trying to navigate to
-					local ok, newValue = pcall(exget, dv, newKey)
+					local newKey, newValue = click.key, click.value
 
-					if not ok then
-						-- Something went wrong, ignore.
-					elseif type(newValue) == "table" and DBG.isDown("m1") then
+					if type(newValue) == "table" and DBG.isDown("m1") then
 						-- Navigating to another table
 						DBG.navigate("key", newKey)
 					elseif DBG._keyboard.isDown("lshift", "rshift") then
@@ -139,7 +136,7 @@ return function(DBG)
 				-- Clicked on the top
 				if not DBG.isDown("m2") then
 					DBG.navigate("parent")
-				elseif debug.getmetatable(dv) ~= nil then
+				elseif debug.getmetatable(navValue) ~= nil then
 					-- Navigating to the currently indexed variable's metatable
 					DBG.navigate("meta")
 				end
@@ -147,16 +144,11 @@ return function(DBG)
 		end
 
 		-- Scrolling the environment
-		if DBG.isDown("mpos") and index then
-			DBG._yScroll = DBG._yScroll + 4
-			if DBG._yScroll > #index then
-				DBG._yScroll = #index
-			end
-		elseif DBG.isDown("mneg") and index then
-			DBG._yScroll = DBG._yScroll - 4
-			if DBG._yScroll < 1 then
-				DBG._yScroll = 1
-			end
+		if not navSort then return end
+		if DBG.isDown("mpos") then
+			DBG._yScroll = math.min(DBG._yScroll + 4, math.max(1, #navSort))
+		elseif DBG.isDown("mneg") then
+			DBG._yScroll = math.max(DBG._yScroll - 4, 1)
 		end
 	end
 
@@ -177,7 +169,7 @@ return function(DBG)
 			DBG._handleCursorMovement()
 			DBG._handleClipboard()
 
-			local dv, index = DBG._handleEnvUpdate()
+			DBG._handleEnvUpdate()
 
 			DBG._handleConsoleExecution()
 

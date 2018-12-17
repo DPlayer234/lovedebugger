@@ -74,32 +74,31 @@ return function(DBG)
 	end
 
 	-- Gets the currently navigated to value
-	function DBG._getDv(nav)
-		local dv = DBG._envRoot
+	function DBG._getNavValue(nav)
+		local navValue = DBG._envRoot
 		local ok
 
 		for i=1, #nav do
-			ok, dv = pcall(DBG._subGetDv, dv, nav[i])
+			ok, navValue = pcall(DBG._subGetNavValue, navValue, nav[i])
 			if not ok then return nil end
 		end
 
-		return dv
+		return navValue
 	end
 
 	-- Gets the currently navigated to value and the index if valid
-	function DBG._getDvIndex(nav)
-		local dv = DBG._getDv(nav)
-		if type(dv) == "table" then
-			return dv, DBG._sortedTable(dv)
+	function DBG._getNavValueSort(nav)
+		local navValue = DBG._getNavValue(nav)
+		if type(navValue) == "table" then
+			return DBG._sortAsEnv(navValue), navValue
+		elseif DBG.isFunctionIndexAllowed() and type(navValue) == "function" then
+			return navValue[DBG.FUNCTION_UPVALUE_MAP], navValue
 		end
-		if DBG.isFunctionIndexAllowed() and type(dv) == "function" then
-			return dv, DBG._sortedTable(dv[DBG.FUNCTION_UPVALUE_NAMES])
-		end
-		return dv
+		return nil, navValue
 	end
 
 	-- Gets the next entry in the DV based on the current DV and nav[i]
-	function DBG._subGetDv(cdv, navI)
+	function DBG._subGetNavValue(cdv, navI)
 		if navI.meta then
 			return debug.getmetatable(cdv)
 		end
@@ -130,29 +129,42 @@ return function(DBG)
 		return DBG._font
 	end
 
+	local function lt(a, b) return a < b end
+
 	-- This function will affect the order of the environment display.
-	-- You may rewrite this: It should get a table and return an array with the KEYS of the origCallback table as its VALUES.
-	-- E.g. DBG._sortedTable({ x = 5, y = 2, a = "test" }) -> { "a", "x", "y" }
-	local function sortCont(a, b) if type(a) == type(b) then return a < b else return tostring(a) < tostring(b) end end
-	local function pSortCont(a, b) local s, r = pcall(sortCont, a, b) return s and r end
+	DBG.envSortFunc = function(a, b)
+		local tva, tvb = type(a.value), type(b.value)
+		if tva ~= tvb then
+			if tva == "function" then
+				return false
+			elseif tvb == "function" then
+				return true
+			end
+		end
+
+		local tka, tkb = type(a.key), type(b.key)
+		if tka == tkb then
+			local s, r = pcall(lt, a.key, b.key)
+			return s and r
+		end
+		return tka < tkb
+	end
 
 	-- Sorts a table
-	function DBG._sortedTable(t)
-		local to = {}
+	function DBG._sortAsEnv(t)
+		local to = DBG._untable(t)
 		if DBG._hidden[t] then
 			local hidden = DBG._hidden[t]
 
-			for k, v in next, t do
-				if type(k) ~= "string" or k:find(hidden) == nil then
-					to[#to+1] = k
+			for i=#to, 1, -1 do
+				local k = to[i].key
+				if type(k) == "string" and k:find(hidden) ~= nil then
+					table.remove(to, i)
 				end
 			end
-		else
-			for k,v in next, t do
-				to[#to+1] = k
-			end
 		end
-		pcall(table.sort, to, sortCont)
+
+		table.sort(to, DBG.envSortFunc)
 		return to
 	end
 
