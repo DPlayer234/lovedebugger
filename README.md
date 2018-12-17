@@ -162,7 +162,7 @@ debugger.removeUpdate(id)
 -- Removes a function by ID from being called every frame.
 
 local env, envName = debugger.getEnv()
--- Returns the current environment root. Defaults to _G, "env".
+-- Returns the current environment root. Defaults to _G, "_ENV".
 
 debugger.setEnv(env, [envName])
 -- Replaces the root environment used by the debugger and the Lua prompt.
@@ -209,6 +209,9 @@ debugger.disallowFunctionIndex()
 
 local allowed = debugger.isFunctionIndexAllowed()
 -- Returns whether function indexing is allowed.
+
+local isValid = debugger.isVariableName(str)
+-- Returns whether the passed string is a valid variable name.
 
 debugger.monitorGlobal([options])
 -- Enables monitoring the global environment for unusual changes or activities

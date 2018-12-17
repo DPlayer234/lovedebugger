@@ -30,9 +30,7 @@ return function(DBG)
 		local ret = setmetatable({}, {__mode = "kv", __index = function()return{}end})
 		local retn = setmetatable({}, {__mode = "kv"})
 
-		local isVarName = function(name)
-			return name:find("^[_a-zA-Z][_a-zA-Z0-9]*$") and true
-		end
+		local isVarName = DBG.isVariableName
 
 		local getlist = function(f)
 			if upval[f] then

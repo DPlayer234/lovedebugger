@@ -71,6 +71,11 @@ return function(DBG)
 		return chars
 	end
 
+	-- Returns whether the given str is a valid variable name
+	function DBG.isVariableName(str)
+		return (str:find("^[_A-Za-z][_A-Za-z0-9]*$")) ~= nil
+	end
+
 	-- Safely gets a value without calling anything
 	function DBG.safeIndex(table, key, depth)
 		depth = depth or 0
@@ -114,7 +119,7 @@ return function(DBG)
 			if navI.meta then
 				res = "META(" .. res .. ")"
 			elseif type(navI.key) == "string" then
-				if navI.key:find("^[_A-Za-z][_A-Za-z0-9]+$") then
+				if DBG.isVariableName(navI.key) then
 					res = res == DBG._envRootName
 						and navI.key
 						or res .. "." .. navI.key

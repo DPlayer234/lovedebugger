@@ -14,8 +14,9 @@ return function(DBG)
 	local table = table
 
 	DBG._LOAD_SRC = "DBG_SRC_STRING"
+	DBG._DEFAULT_ENV_ROOT_NAME = "_ENV"
 
-	DBG._envRootName = "env"
+	DBG._envRootName = DBG._DEFAULT_ENV_ROOT_NAME
 	DBG._loadEnv = _G
 	DBG._envRoot = _G
 
@@ -48,9 +49,9 @@ return function(DBG)
 		assert(type(env) == "table", "Argument #1 to DBG.setEnv(env, envName) must be a table!")
 		if envName ~= nil then
 			assert(type(envName) == "string", "Argument #2 to DBG.setEnv(env, envName) must be a string or nil!")
-			assert((envName:find("[_a-zA-Z][_a-zA-Z0-9]+")), "Argument #2 to DBG.setEnv(env, envName) must be a valid variable name!")
+			assert(DBG.isVariableName(envName), "Argument #2 to DBG.setEnv(env, envName) must be a valid variable name!")
 
-			DBG._envRootName = envName or "env"
+			DBG._envRootName = envName or DBG._DEFAULT_ENV_ROOT_NAME
 		end
 
 		DBG._envRoot = env
